@@ -4,28 +4,25 @@ import { supabase } from '../supabase'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    // El 'user' ahora contendrá los datos del perfil de la tabla 'profiles'
     user: null, 
     session: null,
   }),
 
   getters: {
-    // Un getter para saber fácilmente si el usuario está autenticado
     isAuthenticated: (state) => !!state.user,
-    // Un getter para obtener el rol del usuario
-    userRole: (state) => state.user?.role || null,
+    userRole: (state) => state.user?.rol || null, 
   },
 
   actions: {
     // Función privada para obtener el perfil de un usuario
     async _getProfile(userId) {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfiles') 
         .select('*')
         .eq('id', userId)
-        .single() // .single() devuelve un objeto en lugar de un array
+        .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 es 'no rows found', lo ignoramos
+      if (error && error.code !== 'PGRST116') {
         throw error
       }
       return data
@@ -36,12 +33,10 @@ export const useAuthStore = defineStore('auth', {
         email,
         password,
         options: {
-          // Podemos pasar datos adicionales que el trigger usará
-          data: metadata // ej: { full_name: 'Juan Perez' }
+          data: metadata
         }
       })
-      if (error) throw error
-      // El trigger se encargará de crear el perfil. No necesitamos hacer más.
+      if (error) throw error;
       return data
     },
 
@@ -54,7 +49,6 @@ export const useAuthStore = defineStore('auth', {
       if (error) throw error
       
       this.session = data.session
-      // Tras iniciar sesión, obtenemos su perfil
       this.user = await this._getProfile(data.user.id)
       
       return data
@@ -68,35 +62,49 @@ export const useAuthStore = defineStore('auth', {
       this.session = null
     },
     
-    // fetchUser ahora se convierte en la función principal de inicialización
     async initialize() {
       const { data } = await supabase.auth.getSession()
       this.session = data.session
 
       if (this.session) {
-        // Si hay sesión, obtenemos el perfil del usuario
         this.user = await this._getProfile(this.session.user.id)
       } else {
         this.user = null
       }
     },
 
-    // Acción para que un usuario actualice su propio perfil
     async updateProfile(updates) {
       if (!this.user) return;
 
       const { data, error } = await supabase
-        .from('profiles')
+        .from('perfiles')
         .update(updates)
         .eq('id', this.user.id)
-        .select() // .select() para que devuelva el registro actualizado
+        .select()
         .single()
 
       if (error) throw error
 
-      // Actualizamos el estado local con los nuevos datos
       this.user = { ...this.user, ...data }
       return data;
-    }
+    },
+
+    // --- NUEVA ACCIÓN PARA EL NUTRICIONISTA ---
+    async crearCliente(email, password, nombre_completo) {
+      const { data, error } = await supabase.functions.invoke('crear-cliente', {
+        body: { email, password, nombre_completo },
+      })
+
+      if (error) {
+        throw new Error(error.message)
+      }
+      
+      // La Edge Function puede devolver un error en su propiedad 'error'
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      return data;
+    },
   }
 })

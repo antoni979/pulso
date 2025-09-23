@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore'
 const authStore = useAuthStore()
 const email = ref('')
 const password = ref('')
-const fullName = ref('')
+const fullName = ref('') // No cambia el nombre de la variable local
 const isRegistering = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -20,8 +20,9 @@ const handleAuth = async () => {
 
   try {
     if (isRegistering.value) {
+      // CORREGIDO: Enviamos 'nombre_completo' para que coincida con el trigger SQL
       await authStore.signUp(email.value, password.value, { 
-        full_name: fullName.value 
+        nombre_completo: fullName.value 
       })
       successMessage.value = '¡Registro exitoso! Ya puedes iniciar sesión.'
     } else {
@@ -44,13 +45,10 @@ const toggleMode = () => {
 <template>
   <div class="min-h-screen flex items-center justify-center bg-slate-50 p-4">
     <div class="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 space-y-6">
-      
       <div class="text-center">
-        <!-- Novedad: Título animado con gradiente -->
         <h1 class="text-6xl font-extrabold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent animate-fade-in-up">
-          Pulso
+          NutriApp
         </h1>
-
         <h2 class="mt-2 text-2xl font-bold tracking-tight text-gray-900">
           {{ isRegistering ? 'Crea tu cuenta' : 'Bienvenido de vuelta' }}
         </h2>
@@ -73,7 +71,6 @@ const toggleMode = () => {
             />
           </div>
         </div>
-
         <div>
           <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
           <div class="mt-1">
@@ -88,7 +85,6 @@ const toggleMode = () => {
             />
           </div>
         </div>
-
         <div>
           <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
           <div class="mt-1">
@@ -103,7 +99,6 @@ const toggleMode = () => {
             />
           </div>
         </div>
-
         <div>
           <button
             type="submit"
@@ -129,7 +124,6 @@ const toggleMode = () => {
           {{ isRegistering ? 'Inicia sesión' : 'Regístrate aquí' }}
         </button>
       </p>
-
     </div>
   </div>
 </template>
