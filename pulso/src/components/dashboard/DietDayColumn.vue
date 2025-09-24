@@ -8,16 +8,16 @@ const props = defineProps({
 const emit = defineEmits(['add-item', 'edit-item', 'delete-item']);
 
 // Función explícita para manejar el clic y construir el contexto
-function onAddItemClick(mealName) {
-  const context = { day: props.dayName, meal: mealName };
+function onAddItemClick(comida) {
+  const context = { dia: props.dayName, comida: comida };
   emit('add-item', context);
 }
 </script>
 
 <template>
-  <div class="bg-white rounded-xl shadow p-4 space-y-4">
-    <h3 class="font-bold capitalize text-center text-lg text-gray-800">{{ dayName }}</h3>
-    
+  <div class="bg-white rounded-xl shadow-md p-6 space-y-6 transition-all duration-300 hover:shadow-lg hover:bg-gray-50">
+    <h3 class="font-bold capitalize text-center text-lg text-gray-800 transition-colors duration-200 hover:text-emerald-700">{{ dayName }}</h3>
+
     <DietMealCard
       v-for="(items, mealName) in dayData"
       :key="mealName"
