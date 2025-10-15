@@ -6,29 +6,45 @@ export const useExercisesStore = defineStore('exercises', () => {
   const exercises = ref<Exercise[]>([])
   const loading = ref(false)
   const searchQuery = ref('')
+  const error = ref<string | null>(null)
 
   // Search exercises by name
   async function searchExercises(query: string) {
-    if (!query || query.length < 2) {
+    // Limpiar query y validar
+    const cleanQuery = query.trim()
+
+    if (!cleanQuery || cleanQuery.length < 2) {
       exercises.value = []
+      error.value = null
       return
     }
 
     loading.value = true
-    searchQuery.value = query
+    searchQuery.value = cleanQuery
+    error.value = null
 
     try {
-      const { data, error } = await supabase
+      const { data, error: supabaseError } = await supabase
         .from('exercises')
         .select('*')
-        .ilike('name', `%${query}%`)
+        .ilike('name', `%${cleanQuery}%`)
         .order('name', { ascending: true })
         .limit(20)
 
-      if (error) throw error
+      if (supabaseError) {
+        console.error('Supabase error:', supabaseError)
+        throw supabaseError
+      }
+
       exercises.value = data || []
-    } catch (error) {
-      console.error('Error searching exercises:', error)
+
+      // Si no hay resultados, no es un error
+      if (exercises.value.length === 0) {
+        error.value = null
+      }
+    } catch (err) {
+      console.error('Error searching exercises:', err)
+      error.value = 'Error al buscar ejercicios'
       exercises.value = []
     } finally {
       loading.value = false
@@ -59,12 +75,15 @@ export const useExercisesStore = defineStore('exercises', () => {
   function clearSearch() {
     exercises.value = []
     searchQuery.value = ''
+    error.value = null
+    loading.value = false
   }
 
   return {
     exercises,
     loading,
     searchQuery,
+    error,
     searchExercises,
     loadAllExercises,
     clearSearch

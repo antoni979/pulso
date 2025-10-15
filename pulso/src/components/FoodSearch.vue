@@ -70,17 +70,28 @@ const resetAll = () => {
   }
 }
 
-// Watch search input con debounce
+// Watch search input con debounce mejorado
 watch(searchInput, (newValue) => {
+  // Limpiar timeout anterior
   if (debounceTimeout.value) {
     clearTimeout(debounceTimeout.value)
+    debounceTimeout.value = null
   }
 
-  if (newValue.length >= 2) {
-    debounceTimeout.value = setTimeout(() => {
-      foodsStore.searchFoods(newValue)
-    }, 300) as unknown as number
+  // Limpiar y validar
+  const cleanValue = newValue.trim()
+
+  if (cleanValue.length >= 2) {
+    // Crear nuevo timeout
+    debounceTimeout.value = setTimeout(async () => {
+      try {
+        await foodsStore.searchFoods(cleanValue)
+      } catch (error) {
+        console.error('Error en búsqueda:', error)
+      }
+    }, 400) as unknown as number
   } else {
+    // Si el input es muy corto, limpiar inmediatamente
     foodsStore.clearSearch()
   }
 })
