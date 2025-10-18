@@ -2,6 +2,8 @@
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useFoodsStore } from '@/stores/foods'
 import { useMealsStore } from '@/stores/meals'
+import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { useGeminiNutrition } from '@/composables/useGeminiNutrition'
 import type { Food } from '@/lib/supabase'
 
 const emit = defineEmits<{
@@ -11,9 +13,11 @@ const emit = defineEmits<{
 
 const foodsStore = useFoodsStore()
 const mealsStore = useMealsStore()
+const audioRecorder = useAudioRecorder()
+const geminiNutrition = useGeminiNutrition()
 
 // Estado del flujo
-const step = ref<'search' | 'configure'>('search')
+const step = ref<'search' | 'configure' | 'audio'>('search')
 
 // Búsqueda
 const searchInput = ref('')
@@ -32,6 +36,16 @@ const mealConfig = ref({
   carbs: 0,
   fats: 0
 })
+
+// Items individuales del plato (solo para análisis de audio)
+const foodItems = ref<Array<{
+  name: string
+  grams: number
+  calories: number
+  protein: number
+  carbs: number
+  fats: number
+}>>([])
 
 const isSaving = ref(false)
 
@@ -53,6 +67,7 @@ const resetAll = () => {
   step.value = 'search'
   searchInput.value = ''
   selectedFood.value = null
+  foodItems.value = []
   mealConfig.value = {
     meal_type: 'lunch',
     grams: 100,
@@ -67,6 +82,9 @@ const resetAll = () => {
   if (debounceTimeout.value) {
     clearTimeout(debounceTimeout.value)
     debounceTimeout.value = null
+  }
+  if (audioRecorder.isRecording.value) {
+    audioRecorder.cancelRecording()
   }
 }
 
@@ -186,6 +204,103 @@ const getMealTypeEmoji = (type: string) => {
   }
   return emojis[type] || '🍽️'
 }
+
+// ========== FUNCIONALIDAD DE AUDIO ==========
+
+// Iniciar grabación de audio
+const startAudioRecording = async () => {
+  try {
+    step.value = 'audio'
+    await audioRecorder.startRecording()
+  } catch (error) {
+    console.error('Error al iniciar grabación:', error)
+    step.value = 'search'
+  }
+}
+
+// Detener grabación y procesar
+const stopAndProcessAudio = async () => {
+  try {
+    audioRecorder.isProcessing.value = true
+    const audioBlob = await audioRecorder.stopRecording()
+
+    // Analizar con Gemini
+    const nutritionData = await geminiNutrition.analyzeAudioNutrition(audioBlob)
+
+    // Guardar items individuales
+    foodItems.value = nutritionData.items || []
+
+    // Configurar la comida con los datos analizados
+    mealConfig.value = {
+      meal_type: nutritionData.meal_type,
+      grams: nutritionData.grams,
+      name: nutritionData.name,
+      calories: nutritionData.calories,
+      protein: nutritionData.protein,
+      carbs: nutritionData.carbs,
+      fats: nutritionData.fats
+    }
+
+    // Ir a configuración (sin selectedFood porque vino de audio)
+    selectedFood.value = null
+    step.value = 'configure'
+  } catch (error) {
+    console.error('Error al procesar audio:', error)
+    alert('Error al procesar el audio. Por favor, inténtalo de nuevo.')
+    step.value = 'search'
+  } finally {
+    audioRecorder.isProcessing.value = false
+  }
+}
+
+// Cancelar grabación
+const cancelAudioRecording = () => {
+  audioRecorder.cancelRecording()
+  step.value = 'search'
+}
+
+// Guardar comida desde audio (sin validación de selectedFood)
+const saveMealFromAudio = async () => {
+  if (mealConfig.value.grams <= 0 || mealConfig.value.calories <= 0) return
+
+  isSaving.value = true
+  try {
+    await mealsStore.addMeal({
+      name: mealConfig.value.name,
+      meal_type: mealConfig.value.meal_type,
+      calories: mealConfig.value.calories,
+      protein: mealConfig.value.protein,
+      carbs: mealConfig.value.carbs,
+      fats: mealConfig.value.fats,
+      eaten_at: new Date().toISOString()
+    })
+    emit('saved')
+    emit('close')
+  } catch (error) {
+    console.error('Error al guardar comida:', error)
+    alert('Error al guardar la comida')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Recalcular totales cuando se elimina un alimento
+const recalculateTotals = () => {
+  if (foodItems.value.length === 0) {
+    mealConfig.value.grams = 0
+    mealConfig.value.calories = 0
+    mealConfig.value.protein = 0
+    mealConfig.value.carbs = 0
+    mealConfig.value.fats = 0
+    return
+  }
+
+  mealConfig.value.grams = foodItems.value.reduce((sum, item) => sum + item.grams, 0)
+  mealConfig.value.calories = Math.round(foodItems.value.reduce((sum, item) => sum + item.calories, 0))
+  mealConfig.value.protein = Math.round(foodItems.value.reduce((sum, item) => sum + item.protein, 0))
+  mealConfig.value.carbs = Math.round(foodItems.value.reduce((sum, item) => sum + item.carbs, 0))
+  mealConfig.value.fats = Math.round(foodItems.value.reduce((sum, item) => sum + item.fats, 0))
+}
 </script>
 
 <template>
@@ -195,9 +310,11 @@ const getMealTypeEmoji = (type: string) => {
       <div class="bg-gradient-to-br from-primary-500 to-primary-600 text-white p-6 rounded-t-3xl sticky top-0 z-10">
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-2xl font-black">{{ step === 'search' ? 'Buscar Alimento' : 'Configurar Comida' }}</h2>
+            <h2 class="text-2xl font-black">
+              {{ step === 'search' ? 'Registrar Comida' : step === 'audio' ? 'Grabando Audio' : 'Configurar Comida' }}
+            </h2>
             <p class="text-primary-100 text-sm font-medium mt-1">
-              {{ step === 'search' ? '¿Qué comiste hoy?' : 'Ajusta la cantidad y tipo de comida' }}
+              {{ step === 'search' ? 'Busca un alimento o graba un audio' : step === 'audio' ? 'Describe lo que comiste' : 'Ajusta la cantidad y tipo de comida' }}
             </p>
           </div>
           <button
@@ -215,6 +332,29 @@ const getMealTypeEmoji = (type: string) => {
       <div class="p-6">
         <!-- STEP 1: Búsqueda -->
         <div v-if="step === 'search'">
+          <!-- Botón de Audio (destacado) -->
+          <div class="mb-6">
+            <button
+              @click="startAudioRecording"
+              class="w-full bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center space-x-3"
+            >
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              <div class="text-left">
+                <div class="text-lg font-black">Grabar Audio</div>
+                <div class="text-xs text-white/80">Describe tu comida por voz</div>
+              </div>
+            </button>
+          </div>
+
+          <!-- Separador -->
+          <div class="flex items-center my-6">
+            <div class="flex-1 border-t border-gray-300"></div>
+            <span class="px-4 text-sm text-gray-500 font-semibold">o busca manualmente</span>
+            <div class="flex-1 border-t border-gray-300"></div>
+          </div>
+
           <!-- Search Input -->
           <div class="relative mb-4">
             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -282,10 +422,142 @@ const getMealTypeEmoji = (type: string) => {
           </div>
         </div>
 
+        <!-- STEP AUDIO: Grabación de audio -->
+        <div v-if="step === 'audio'" class="space-y-6">
+          <!-- Estado de grabación -->
+          <div class="text-center py-12">
+            <div v-if="audioRecorder.isRecording.value" class="space-y-6">
+              <!-- Animación de micrófono -->
+              <div class="relative inline-block">
+                <div class="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                <div class="relative w-32 h-32 bg-gradient-to-br from-red-500 to-pink-600 rounded-full flex items-center justify-center shadow-2xl">
+                  <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </div>
+              </div>
+
+              <div>
+                <p class="text-xl font-black text-gray-900 mb-2">Grabando...</p>
+                <p class="text-gray-600 text-sm">
+                  Describe tu comida. Ejemplo:<br>
+                  <span class="italic text-gray-500">"Para el almuerzo comí 200g de pollo a la plancha con arroz"</span>
+                </p>
+              </div>
+
+              <!-- Botones -->
+              <div class="flex space-x-3 justify-center max-w-md mx-auto">
+                <button
+                  @click="cancelAudioRecording"
+                  class="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  @click="stopAndProcessAudio"
+                  class="flex-1 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-bold rounded-xl hover:from-primary-700 hover:to-primary-600 shadow-lg transition-all"
+                >
+                  ✓ Detener y Analizar
+                </button>
+              </div>
+            </div>
+
+            <!-- Estado de procesamiento -->
+            <div v-else-if="audioRecorder.isProcessing.value || geminiNutrition.isAnalyzing.value" class="space-y-6">
+              <div class="inline-block w-24 h-24 border-8 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+              <div>
+                <p class="text-xl font-black text-gray-900 mb-2">Analizando tu comida...</p>
+                <p class="text-gray-600 text-sm">Estamos calculando las calorías y macros exactos</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Errores -->
+          <div v-if="audioRecorder.error.value || geminiNutrition.error.value" class="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+            <p class="text-red-700 font-semibold">{{ audioRecorder.error.value || geminiNutrition.error.value }}</p>
+          </div>
+        </div>
+
         <!-- STEP 2: Configuración -->
-        <div v-if="step === 'configure' && selectedFood" class="space-y-6">
-          <!-- Alimento seleccionado -->
-          <div class="bg-primary-50 border-2 border-primary-200 rounded-xl p-4">
+        <div v-if="step === 'configure'" class="space-y-6">
+          <!-- Información del análisis de audio -->
+          <div v-if="!selectedFood" class="bg-gradient-to-br from-pink-50 to-purple-50 border-2 border-pink-200 rounded-xl p-5">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center space-x-2">
+                <svg class="w-6 h-6 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="font-black text-lg text-gray-900">Análisis completado</p>
+              </div>
+              <button
+                @click="step = 'search'"
+                class="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p class="text-sm text-gray-600 mb-3">Detectamos tu comida y calculamos los valores nutricionales. Revisa y ajusta lo que necesites antes de guardar.</p>
+
+            <!-- Nombre de la comida editable -->
+            <div>
+              <label class="block text-xs font-bold text-gray-700 mb-2">Nombre de la comida:</label>
+              <input
+                v-model="mealConfig.name"
+                type="text"
+                class="w-full px-3 py-2 bg-white border-2 border-pink-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 font-semibold text-gray-900"
+                placeholder="Ej: Pollo a la plancha con arroz"
+              />
+            </div>
+
+            <!-- Desglose de alimentos individuales -->
+            <div v-if="foodItems.length > 0" class="mt-4">
+              <label class="block text-xs font-bold text-gray-700 mb-2">Alimentos detectados:</label>
+              <div class="space-y-2">
+                <div
+                  v-for="(item, index) in foodItems"
+                  :key="index"
+                  class="bg-white border-2 border-pink-100 rounded-lg p-3 hover:border-pink-300 transition-colors"
+                >
+                  <div class="flex items-start justify-between mb-2">
+                    <div class="flex-1">
+                      <p class="font-bold text-gray-900 text-sm">{{ item.name }}</p>
+                      <p class="text-xs text-gray-600 font-semibold mt-1">{{ item.grams }}g</p>
+                    </div>
+                    <button
+                      @click="foodItems.splice(index, 1); recalculateTotals()"
+                      class="text-red-500 hover:text-red-700 text-xs font-bold ml-2"
+                      title="Eliminar este alimento"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div class="grid grid-cols-4 gap-2 text-xs">
+                    <div class="text-center">
+                      <p class="text-gray-500">Kcal</p>
+                      <p class="font-bold text-primary-600">{{ item.calories }}</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-gray-500">Prot</p>
+                      <p class="font-bold text-blue-600">{{ item.protein }}g</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-gray-500">Carb</p>
+                      <p class="font-bold text-orange-600">{{ item.carbs }}g</p>
+                    </div>
+                    <div class="text-center">
+                      <p class="text-gray-500">Gras</p>
+                      <p class="font-bold text-yellow-600">{{ item.fats }}g</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alimento seleccionado (solo si viene de búsqueda manual) -->
+          <div v-if="selectedFood" class="bg-primary-50 border-2 border-primary-200 rounded-xl p-4">
             <div class="flex items-start justify-between">
               <div class="flex-1">
                 <p class="font-black text-xl text-gray-900 mb-2">{{ selectedFood.name }}</p>
@@ -353,12 +625,63 @@ const getMealTypeEmoji = (type: string) => {
             />
           </div>
 
-          <!-- Información nutricional calculada -->
+          <!-- Información nutricional (editable si viene de audio) -->
           <div class="bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl p-5 border-2 border-primary-200">
-            <p class="text-sm font-bold text-primary-800 mb-4 uppercase tracking-wide">
-              Información nutricional total ({{ mealConfig.grams }}g):
+            <p class="text-sm font-bold text-primary-800 mb-4 uppercase tracking-wide flex items-center justify-between">
+              <span>Valores Nutricionales:</span>
+              <span v-if="!selectedFood" class="text-xs bg-pink-500 text-white px-3 py-1 rounded-full normal-case">Editables</span>
             </p>
-            <div class="grid grid-cols-2 gap-3">
+
+            <!-- Si viene de audio, campos editables -->
+            <div v-if="!selectedFood" class="grid grid-cols-2 gap-3">
+              <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+                <p class="text-xs text-gray-600 font-semibold mb-2">Calorías</p>
+                <input
+                  v-model.number="mealConfig.calories"
+                  type="number"
+                  min="0"
+                  step="1"
+                  class="w-full text-center text-2xl font-black text-primary-600 bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p class="text-xs text-gray-500 mt-1">kcal</p>
+              </div>
+              <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+                <p class="text-xs text-gray-600 font-semibold mb-2">Proteína</p>
+                <input
+                  v-model.number="mealConfig.protein"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  class="w-full text-center text-2xl font-black text-blue-600 bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p class="text-xs text-gray-500 mt-1">gramos</p>
+              </div>
+              <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+                <p class="text-xs text-gray-600 font-semibold mb-2">Carbohidratos</p>
+                <input
+                  v-model.number="mealConfig.carbs"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  class="w-full text-center text-2xl font-black text-orange-600 bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+                <p class="text-xs text-gray-500 mt-1">gramos</p>
+              </div>
+              <div class="bg-white rounded-lg p-4 text-center shadow-sm">
+                <p class="text-xs text-gray-600 font-semibold mb-2">Grasas</p>
+                <input
+                  v-model.number="mealConfig.fats"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  class="w-full text-center text-2xl font-black text-yellow-600 bg-gray-50 border-2 border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                />
+                <p class="text-xs text-gray-500 mt-1">gramos</p>
+              </div>
+            </div>
+
+            <!-- Si viene de búsqueda manual, solo mostrar -->
+            <div v-else class="grid grid-cols-2 gap-3">
               <div class="bg-white rounded-lg p-4 text-center shadow-sm">
                 <p class="text-xs text-gray-600 font-semibold mb-1">Calorías</p>
                 <p class="text-3xl font-black text-primary-600">{{ mealConfig.calories }}</p>
@@ -396,14 +719,14 @@ const getMealTypeEmoji = (type: string) => {
         </div>
         <div v-if="step === 'configure'" class="flex space-x-3">
           <button
-            @click="goBackToSearch"
+            @click="selectedFood ? goBackToSearch() : (step = 'search')"
             class="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-all"
             :disabled="isSaving"
           >
             ← Volver
           </button>
           <button
-            @click="saveMeal"
+            @click="selectedFood ? saveMeal() : saveMealFromAudio()"
             :disabled="isSaving || mealConfig.grams <= 0"
             class="flex-1 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-bold rounded-xl hover:from-primary-700 hover:to-primary-600 shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
