@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useFoodsStore } from '@/stores/foods'
 import { useMealsStore } from '@/stores/meals'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
+import { useImageCapture } from '@/composables/useImageCapture'
 import { useGeminiNutrition } from '@/composables/useGeminiNutrition'
 import type { Food } from '@/lib/supabase'
 
@@ -14,10 +15,11 @@ const emit = defineEmits<{
 const foodsStore = useFoodsStore()
 const mealsStore = useMealsStore()
 const audioRecorder = useAudioRecorder()
+const imageCapture = useImageCapture()
 const geminiNutrition = useGeminiNutrition()
 
 // Estado del flujo
-const step = ref<'search' | 'configure' | 'audio'>('search')
+const step = ref<'search' | 'configure' | 'audio' | 'image'>('search')
 
 // Búsqueda
 const searchInput = ref('')
@@ -86,6 +88,7 @@ const resetAll = () => {
   if (audioRecorder.isRecording.value) {
     audioRecorder.cancelRecording()
   }
+  imageCapture.clearImage()
 }
 
 // Watch search input con debounce mejorado
@@ -301,6 +304,53 @@ const recalculateTotals = () => {
   mealConfig.value.carbs = Math.round(foodItems.value.reduce((sum, item) => sum + item.carbs, 0))
   mealConfig.value.fats = Math.round(foodItems.value.reduce((sum, item) => sum + item.fats, 0))
 }
+
+// ========== FUNCIONALIDAD DE IMAGEN ==========
+
+// Capturar imagen desde cámara
+const captureFromCamera = async () => {
+  try {
+    step.value = 'image'
+    const imageBase64 = await imageCapture.captureImage(true) // true = usar cámara
+    await processImage(imageBase64)
+  } catch (error) {
+    console.error('Error al capturar imagen:', error)
+    step.value = 'search'
+  }
+}
+
+
+// Procesar imagen con Gemini Vision
+const processImage = async (imageBase64: string) => {
+  try {
+    // Analizar con Gemini Vision
+    const nutritionData = await geminiNutrition.analyzeImageNutrition(imageBase64)
+
+    // Guardar items individuales
+    foodItems.value = nutritionData.items || []
+
+    // Configurar la comida con los datos analizados
+    mealConfig.value = {
+      meal_type: nutritionData.meal_type,
+      grams: nutritionData.grams,
+      name: nutritionData.name,
+      calories: nutritionData.calories,
+      protein: nutritionData.protein,
+      carbs: nutritionData.carbs,
+      fats: nutritionData.fats
+    }
+
+    // Ir a configuración (sin selectedFood porque vino de imagen)
+    selectedFood.value = null
+    step.value = 'configure'
+  } catch (error) {
+    console.error('Error al procesar imagen:', error)
+    alert('Error al analizar la imagen. Por favor, inténtalo de nuevo.')
+    step.value = 'search'
+  } finally {
+    imageCapture.clearImage()
+  }
+}
 </script>
 
 <template>
@@ -311,10 +361,10 @@ const recalculateTotals = () => {
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-2xl font-black">
-              {{ step === 'search' ? 'Registrar Comida' : step === 'audio' ? 'Grabando Audio' : 'Configurar Comida' }}
+              {{ step === 'search' ? 'Registrar Comida' : step === 'audio' ? 'Grabando Audio' : step === 'image' ? 'Analizando Imagen' : 'Configurar Comida' }}
             </h2>
             <p class="text-primary-100 text-sm font-medium mt-1">
-              {{ step === 'search' ? 'Busca un alimento o graba un audio' : step === 'audio' ? 'Describe lo que comiste' : 'Ajusta la cantidad y tipo de comida' }}
+              {{ step === 'search' ? 'Busca un alimento, foto o audio' : step === 'audio' ? 'Describe lo que comiste' : step === 'image' ? 'Procesando tu foto...' : 'Ajusta la cantidad y tipo de comida' }}
             </p>
           </div>
           <button
@@ -332,19 +382,26 @@ const recalculateTotals = () => {
       <div class="p-6">
         <!-- STEP 1: Búsqueda -->
         <div v-if="step === 'search'">
-          <!-- Botón de Audio (destacado) -->
-          <div class="mb-6">
+          <!-- Botones de captura rápida (Audio y Foto) -->
+          <div class="mb-6 grid grid-cols-2 gap-3">
+            <!-- Botón de Foto -->
+            <button
+              @click="captureFromCamera"
+              class="bg-gradient-to-br from-blue-500 to-cyan-600 text-white rounded-xl p-5 shadow-lg hover:shadow-xl transition-all active:scale-95"
+            >
+              <div class="text-4xl mb-2">📸</div>
+              <div class="text-sm font-black">Foto</div>
+              <div class="text-xs text-white/80 mt-1">Escanear comida</div>
+            </button>
+
+            <!-- Botón de Audio -->
             <button
               @click="startAudioRecording"
-              class="w-full bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-xl p-6 shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center space-x-3"
+              class="bg-gradient-to-br from-red-500 to-pink-600 text-white rounded-xl p-5 shadow-lg hover:shadow-xl transition-all active:scale-95"
             >
-              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-              <div class="text-left">
-                <div class="text-lg font-black">Grabar Audio</div>
-                <div class="text-xs text-white/80">Describe tu comida por voz</div>
-              </div>
+              <div class="text-4xl mb-2">🎤</div>
+              <div class="text-sm font-black">Audio</div>
+              <div class="text-xs text-white/80 mt-1">Describir por voz</div>
             </button>
           </div>
 
@@ -475,6 +532,36 @@ const recalculateTotals = () => {
           <!-- Errores -->
           <div v-if="audioRecorder.error.value || geminiNutrition.error.value" class="bg-red-50 border-2 border-red-200 rounded-xl p-4">
             <p class="text-red-700 font-semibold">{{ audioRecorder.error.value || geminiNutrition.error.value }}</p>
+          </div>
+        </div>
+
+        <!-- STEP IMAGE: Análisis de imagen -->
+        <div v-if="step === 'image'" class="space-y-6">
+          <!-- Preview de la imagen -->
+          <div v-if="imageCapture.imageData.value" class="text-center">
+            <img :src="imageCapture.imageData.value" alt="Imagen capturada" class="max-w-full max-h-64 mx-auto rounded-xl shadow-lg mb-4" />
+            <p class="text-sm text-gray-600">Vista previa de tu comida</p>
+          </div>
+
+          <!-- Estado de procesamiento -->
+          <div v-if="geminiNutrition.isAnalyzing.value" class="text-center py-12">
+            <div class="inline-block w-24 h-24 border-8 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+            <div>
+              <p class="text-xl font-black text-gray-900 mb-2">Analizando tu comida...</p>
+              <p class="text-gray-600 text-sm">Detectando alimentos y calculando valores nutricionales precisos</p>
+              <p class="text-gray-500 text-xs mt-2">Esto puede tomar unos segundos</p>
+            </div>
+          </div>
+
+          <!-- Errores -->
+          <div v-if="imageCapture.error.value || geminiNutrition.error.value" class="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+            <p class="text-red-700 font-semibold">{{ imageCapture.error.value || geminiNutrition.error.value }}</p>
+            <button
+              @click="step = 'search'"
+              class="mt-3 w-full px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Intentar de nuevo
+            </button>
           </div>
         </div>
 
