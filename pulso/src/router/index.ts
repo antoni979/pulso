@@ -36,13 +36,11 @@ const router = createRouter({
 })
 
 // Navigation guards
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
 
   // Initialize auth if not already done
-  if (!authStore.initialized) {
-    await authStore.initialize()
-  }
+  await authStore.initialize()
 
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth)
   const requiresGuest = to.matched.some(record => record.meta.requiresGuest)

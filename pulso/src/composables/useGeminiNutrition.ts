@@ -156,6 +156,10 @@ async function blobToBase64(blob: Blob): Promise<string> {
       const base64 = reader.result as string
       // Remover el prefijo "data:audio/webm;base64,"
       const base64Data = base64.split(',')[1]
+      if (!base64Data) {
+        reject(new Error('No se pudo convertir el audio a base64'))
+        return
+      }
       resolve(base64Data)
     }
     reader.onerror = reject

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useExercisesStore } from '@/stores/exercises'
 import { useWorkoutsStore } from '@/stores/workouts'
 import type { Exercise } from '@/lib/supabase'

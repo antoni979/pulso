@@ -42,7 +42,7 @@ const getWeightDifference = (currentMeasurement: Measurement, index: number) => 
 
   const previousMeasurement = measurementsStore.sortedMeasurements[index + 1]
 
-  if (!currentMeasurement.weight || !previousMeasurement.weight) {
+  if (!previousMeasurement || !currentMeasurement.weight || !previousMeasurement.weight) {
     return null
   }
 
@@ -51,16 +51,28 @@ const getWeightDifference = (currentMeasurement: Measurement, index: number) => 
 }
 
 const handleAdd = async () => {
-  if (!measurementForm.value.weight) {
-    alert('Por favor ingresa al menos el peso')
+  if (!measurementForm.value.weight || !measurementForm.value.measurement_date) {
+    alert('Por favor ingresa al menos el peso y la fecha')
     return
   }
 
+  // Asegurar que measurement_date nunca sea undefined
+  const dataToSave: Omit<Measurement, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+    measurement_date: measurementForm.value.measurement_date,
+    weight: measurementForm.value.weight,
+    chest: measurementForm.value.chest,
+    waist: measurementForm.value.waist,
+    hips: measurementForm.value.hips,
+    thigh: measurementForm.value.thigh,
+    arm: measurementForm.value.arm,
+    notes: measurementForm.value.notes || null
+  }
+
   if (editingId.value) {
-    await measurementsStore.updateMeasurement(editingId.value, measurementForm.value)
+    await measurementsStore.updateMeasurement(editingId.value, dataToSave)
     editingId.value = null
   } else {
-    await measurementsStore.addMeasurement(measurementForm.value)
+    await measurementsStore.addMeasurement(dataToSave)
   }
 
   resetForm()

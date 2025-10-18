@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useMealsStore } from '@/stores/meals'
 import { useWorkoutsStore } from '@/stores/workouts'
@@ -24,27 +24,6 @@ const showFoodSearch = ref(false)
 const showWorkoutSearch = ref(false)
 const showStepsInput = ref(false)
 const activeTab = ref<'stats' | 'macros' | 'history'>('stats')
-
-// KPIs computados
-const weeklyAverage = computed(() => {
-  if (weeklyBalance.weeklyData.value.length === 0) return 0
-  const sum = weeklyBalance.weeklyData.value.reduce((acc, day) => acc + day.balance, 0)
-  return Math.round(sum / weeklyBalance.weeklyData.value.length)
-})
-
-const daysOnTrack = computed(() => {
-  return weeklyBalance.weeklyData.value.filter(day => {
-    const goal = day.deficit_goal
-    if (goal < 0) return day.balance <= goal
-    else return day.balance >= goal
-  }).length
-})
-
-const maxHeight = computed(() => {
-  if (weeklyBalance.weeklyData.value.length === 0) return 100
-  const balances = weeklyBalance.weeklyData.value.map(d => Math.abs(d.balance))
-  return Math.max(...balances, 100)
-})
 
 onMounted(async () => {
   await Promise.all([
@@ -79,16 +58,6 @@ const getMealTypeEmoji = (type: string) => {
     snack: '🍪'
   }
   return emojis[type] || '🍽️'
-}
-
-const getMealTypeName = (type: string) => {
-  const names: Record<string, string> = {
-    breakfast: 'Desayuno',
-    lunch: 'Almuerzo',
-    dinner: 'Cena',
-    snack: 'Snack'
-  }
-  return names[type] || type
 }
 
 const openFoodSearch = () => {
@@ -189,7 +158,7 @@ const handleStepsSaved = () => {
           </div>
           <div>
             <p class="text-xs text-gray-600 mb-1">Balance</p>
-            <p :class="caloriesCalc.netCalories < 0 ? 'text-green-700' : 'text-orange-700'" class="text-2xl font-black">
+            <p :class="caloriesCalc.netCalories.value < 0 ? 'text-green-700' : 'text-orange-700'" class="text-2xl font-black">
               {{ caloriesCalc.netCalories }}
             </p>
           </div>

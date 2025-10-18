@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useFoodsStore } from '@/stores/foods'
 import { useMealsStore } from '@/stores/meals'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
