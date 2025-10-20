@@ -66,6 +66,9 @@ export interface Food {
   carbs_per_100g: number
   fats_per_100g: number
   is_custom: boolean
+  // Unidades alternativas
+  serving_unit?: string | null // 'taza', 'unidad', 'cucharada', 'vaso', etc
+  serving_size_grams?: number | null // Cuántos gramos equivale 1 unidad
   created_at: string
 }
 

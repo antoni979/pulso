@@ -49,17 +49,28 @@ export const useStepsStore = defineStore('steps', () => {
 
   // Actualizar o crear pasos de hoy
   async function updateTodaySteps(steps: number) {
-    if (!authStore.user) return
+    console.log('[DEBUG] updateTodaySteps called with steps:', steps)
+    console.log('[DEBUG] authStore.user:', authStore.user?.id)
+
+    if (!authStore.user) {
+      console.log('[DEBUG] No user, returning early')
+      return
+    }
 
     loading.value = true
     error.value = null
+    console.log('[DEBUG] Loading set to true')
 
     try {
       const today = new Date().toISOString().split('T')[0]
       const caloriesBurned = calculateStepsCalories(steps)
+      console.log('[DEBUG] Today:', today, 'Calories:', caloriesBurned)
+      console.log('[DEBUG] todaySteps.value exists:', !!todaySteps.value)
 
       // Si ya existe un registro de hoy, actualizarlo
       if (todaySteps.value) {
+        console.log('[DEBUG] Updating existing record, id:', todaySteps.value.id)
+
         const { data, error: updateError } = await supabase
           .from('daily_steps')
           .update({
@@ -70,10 +81,14 @@ export const useStepsStore = defineStore('steps', () => {
           .select()
           .single()
 
+        console.log('[DEBUG] Update response - data:', data, 'error:', updateError)
+
         if (updateError) throw updateError
         todaySteps.value = data
+        console.log('[DEBUG] Successfully updated')
       } else {
-        // Si no existe, crear uno nuevo
+        console.log('[DEBUG] Inserting new record')
+
         const { data, error: insertError } = await supabase
           .from('daily_steps')
           .insert({
@@ -85,14 +100,19 @@ export const useStepsStore = defineStore('steps', () => {
           .select()
           .single()
 
+        console.log('[DEBUG] Insert response - data:', data, 'error:', insertError)
+
         if (insertError) throw insertError
         todaySteps.value = data
+        console.log('[DEBUG] Successfully inserted')
       }
+      console.log('[DEBUG] updateTodaySteps completed successfully')
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Error updating steps'
-      console.error('Error updating steps:', e)
+      console.error('[ERROR] Error updating steps:', e)
       throw e
     } finally {
+      console.log('[DEBUG] Setting loading to false')
       loading.value = false
     }
   }

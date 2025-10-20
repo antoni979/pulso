@@ -1,4 +1,4 @@
-// Script simple para generar iconos PNG desde canvas
+// Script para generar iconos PNG minimalistas desde canvas
 const fs = require('fs');
 const { createCanvas } = require('canvas');
 
@@ -6,14 +6,13 @@ function generateIcon(size, filename) {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
 
-  // Fondo con gradiente
+  // Fondo minimalista con gradiente sutil oscuro
   const gradient = ctx.createLinearGradient(0, 0, size, size);
-  gradient.addColorStop(0, '#8b5cf6');
-  gradient.addColorStop(0.5, '#ec4899');
-  gradient.addColorStop(1, '#f97316');
+  gradient.addColorStop(0, '#0f172a');  // Slate-900
+  gradient.addColorStop(1, '#1e293b');  // Slate-800
 
   // Esquinas redondeadas
-  const radius = size * 0.225; // ~115px para 512px
+  const radius = size * 0.225;
   ctx.beginPath();
   ctx.moveTo(radius, 0);
   ctx.lineTo(size - radius, 0);
@@ -28,37 +27,53 @@ function generateIcon(size, filename) {
   ctx.fillStyle = gradient;
   ctx.fill();
 
-  // Línea de pulso blanca
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth = size * 0.023; // ~12px para 512px
+  // Línea de pulso verde esmeralda minimalista
+  const scale = size / 512;
+  const centerY = size * 0.5;
+  const lineWidth = size * 0.012;
+
+  ctx.strokeStyle = '#10b981';  // Verde esmeralda
+  ctx.lineWidth = lineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const centerY = size * 0.55;
-  const scale = size / 512;
-
+  // Línea izquierda
   ctx.beginPath();
-  ctx.moveTo(100 * scale, centerY);
-  ctx.lineTo(150 * scale, centerY - 80 * scale);
-  ctx.lineTo(200 * scale, centerY + 20 * scale);
-  ctx.lineTo(250 * scale, centerY - 120 * scale);
-  ctx.lineTo(300 * scale, centerY);
-  ctx.lineTo(350 * scale, centerY - 40 * scale);
-  ctx.lineTo(400 * scale, centerY);
+  ctx.moveTo(80 * scale, centerY);
+  ctx.lineTo(140 * scale, centerY);
   ctx.stroke();
 
-  // Punto circular
+  // Pulso (electrocardiograma minimalista)
   ctx.beginPath();
-  ctx.arc(size / 2, size * 0.75, size * 0.023, 0, Math.PI * 2);
-  ctx.fillStyle = 'white';
+  ctx.moveTo(140 * scale, centerY);
+  ctx.lineTo(160 * scale, centerY);
+  ctx.lineTo(170 * scale, centerY - 120 * scale);
+  ctx.lineTo(185 * scale, centerY + 160 * scale);
+  ctx.lineTo(200 * scale, centerY - 80 * scale);
+  ctx.lineTo(215 * scale, centerY + 40 * scale);
+  ctx.lineTo(230 * scale, centerY - 60 * scale);
+  ctx.lineTo(245 * scale, centerY);
+  ctx.lineTo(300 * scale, centerY);
+  ctx.stroke();
+
+  // Línea derecha
+  ctx.beginPath();
+  ctx.moveTo(300 * scale, centerY);
+  ctx.lineTo(360 * scale, centerY);
+  ctx.stroke();
+
+  // Punto final (círculo pequeño)
+  ctx.beginPath();
+  ctx.arc(360 * scale, centerY, size * 0.008, 0, Math.PI * 2);
+  ctx.fillStyle = '#10b981';
   ctx.fill();
 
-  // Texto PULSO
-  ctx.font = `bold ${size * 0.16}px Arial, sans-serif`;
+  // Texto PULSO (sans-serif, light weight, espaciado)
+  ctx.font = `300 ${size * 0.10}px system-ui, sans-serif`;
   ctx.fillStyle = 'white';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('PULSO', size / 2, size * 0.90);
+  ctx.fillText('PULSO', size / 2, size * 0.74);
 
   // Guardar
   const buffer = canvas.toBuffer('image/png');
@@ -73,5 +88,4 @@ try {
   console.log('All icons generated successfully!');
 } catch (error) {
   console.error('Error generating icons:', error.message);
-  console.log('\nCanvas module not available. Installing...');
 }

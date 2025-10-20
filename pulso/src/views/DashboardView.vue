@@ -86,30 +86,43 @@ const handleStepsSaved = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50/30 to-white">
-    <!-- Header -->
-    <header class="bg-white/90 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-20 shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 py-3">
+  <div class="min-h-screen bg-slate-50">
+    <!-- Header minimalista -->
+    <header class="bg-white border-b border-slate-200/60 sticky top-0 z-20">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow">
-              <span class="text-xl">🥗</span>
-            </div>
-            <div>
-              <h1 class="text-xl font-black text-gray-900">Pulso</h1>
-              <p class="text-xs text-gray-600">{{ authStore.profile?.full_name || 'Usuario' }}</p>
+          <div class="flex items-center space-x-4">
+            <!-- Logo minimalista -->
+            <div class="flex items-center space-x-3">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M4 16 L10 16 L12 8 L15 24 L18 12 L21 18 L23 16 L28 16"
+                      stroke="#10b981"
+                      stroke-width="2.5"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"/>
+              </svg>
+              <div>
+                <h1 class="text-lg font-semibold text-slate-900 tracking-tight">Pulso</h1>
+                <p class="text-xs text-slate-500 font-medium">{{ authStore.profile?.full_name || 'Usuario' }}</p>
+              </div>
             </div>
           </div>
 
           <div class="flex items-center space-x-2">
-            <button @click="router.push('/profile')" class="p-2 text-gray-700 hover:bg-primary-50 rounded-lg">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            <button @click="router.push('/measurements')" class="p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </button>
-            <button @click="handleSignOut" class="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <button @click="router.push('/profile')" class="p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </button>
+            <button @click="handleSignOut" class="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
           </div>
@@ -118,23 +131,47 @@ const handleStepsSaved = () => {
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 py-4 pb-24">
-      <!-- Action Buttons (Lo primero!) -->
-      <div class="mb-6">
-        <h2 class="text-lg font-bold text-gray-900 mb-3">Registrar</h2>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+      <!-- Action Buttons minimalistas -->
+      <div class="mb-8">
         <div class="grid grid-cols-3 gap-3">
-          <button @click="openFoodSearch" class="bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95">
-            <div class="text-3xl mb-1">🍽️</div>
-            <div class="text-xs font-bold">Comida</div>
+          <!-- Comida -->
+          <button @click="openFoodSearch" class="group bg-white border border-slate-200 hover:border-primary-300 rounded-2xl p-5 transition-all hover:shadow-soft active:scale-[0.98]">
+            <div class="flex flex-col items-center space-y-2">
+              <div class="w-12 h-12 bg-primary-50 group-hover:bg-primary-100 rounded-xl flex items-center justify-center transition-colors">
+                <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </div>
+              <span class="text-sm font-medium text-slate-700 group-hover:text-slate-900">Comida</span>
+            </div>
           </button>
-          <button @click="openWorkoutSearch" class="bg-gradient-to-br from-red-500 to-orange-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95">
-            <div class="text-3xl mb-1">🏋️</div>
-            <div class="text-xs font-bold">Ejercicio</div>
+
+          <!-- Ejercicio -->
+          <button @click="openWorkoutSearch" class="group bg-white border border-slate-200 hover:border-orange-300 rounded-2xl p-5 transition-all hover:shadow-soft active:scale-[0.98]">
+            <div class="flex flex-col items-center space-y-2">
+              <div class="w-12 h-12 bg-orange-50 group-hover:bg-orange-100 rounded-xl flex items-center justify-center transition-colors">
+                <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <span class="text-sm font-medium text-slate-700 group-hover:text-slate-900">Ejercicio</span>
+            </div>
           </button>
-          <button @click="openStepsInput" class="bg-gradient-to-br from-purple-500 to-indigo-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95">
-            <div class="text-3xl mb-1">👟</div>
-            <div class="text-xs font-bold">Pasos</div>
-            <div class="text-xs mt-1">{{stepsStore.todaySteps?.steps_count || 0}}</div>
+
+          <!-- Pasos -->
+          <button @click="openStepsInput" class="group bg-white border border-slate-200 hover:border-blue-300 rounded-2xl p-5 transition-all hover:shadow-soft active:scale-[0.98]">
+            <div class="flex flex-col items-center space-y-2">
+              <div class="w-12 h-12 bg-blue-50 group-hover:bg-blue-100 rounded-xl flex items-center justify-center transition-colors relative">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+              </div>
+              <div class="text-center">
+                <span class="text-sm font-medium text-slate-700 group-hover:text-slate-900 block">Pasos</span>
+                <span class="text-xs text-slate-500 font-medium">{{stepsStore.todaySteps?.steps_count || 0}}</span>
+              </div>
+            </div>
           </button>
         </div>
       </div>

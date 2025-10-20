@@ -8,7 +8,16 @@ export const useFoodsStore = defineStore('foods', () => {
   const searchQuery = ref('')
   const error = ref<string | null>(null)
 
-  // Search foods by name
+  // Función helper para normalizar texto (quitar tildes)
+  function normalizeText(text: string): string {
+    return text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  }
+
+  // Search foods by name (sin tildes) - Versión mejorada y robusta
   async function searchFoods(query: string) {
     // Limpiar query y validar
     const cleanQuery = query.trim()
@@ -24,19 +33,46 @@ export const useFoodsStore = defineStore('foods', () => {
     error.value = null
 
     try {
+      // Estrategia: Buscar MÁS resultados del servidor (más permisivo)
+      // y filtrar inteligentemente en el cliente
+
+      // Extraer primera palabra para búsqueda más amplia
+      const firstWord = cleanQuery.split(' ')[0]
+
       const { data, error: supabaseError } = await supabase
         .from('foods')
         .select('*')
-        .ilike('name', `%${cleanQuery}%`)
+        .ilike('name', `%${firstWord}%`)
         .order('name', { ascending: true })
-        .limit(20)
+        .limit(50) // Más resultados para filtrar en cliente
 
       if (supabaseError) {
         console.error('Supabase error:', supabaseError)
         throw supabaseError
       }
 
-      foods.value = data || []
+      // Filtrado inteligente en cliente (sin tildes)
+      const allResults = data || []
+      const normalizedQuery = normalizeText(cleanQuery)
+
+      foods.value = allResults
+        .filter(food => {
+          const normalizedFoodName = normalizeText(food.name)
+
+          // Match exacto sin tildes
+          if (normalizedFoodName.includes(normalizedQuery)) {
+            return true
+          }
+
+          // Match por palabras individuales
+          const queryWords = normalizedQuery.split(' ').filter(w => w.length > 0)
+          const nameWords = normalizedFoodName.split(' ')
+
+          return queryWords.every(queryWord =>
+            nameWords.some(nameWord => nameWord.includes(queryWord))
+          )
+        })
+        .slice(0, 20) // Limitar a 20 resultados finales
 
       // Si no hay resultados, no es un error
       if (foods.value.length === 0) {
@@ -71,12 +107,15 @@ export const useFoodsStore = defineStore('foods', () => {
     }
   }
 
-  // Clear search results
+  // Clear search results - VERSIÓN ROBUSTA
   function clearSearch() {
+    // Orden importa: primero detener loading
+    loading.value = false
+    // Luego limpiar error
+    error.value = null
+    // Finalmente limpiar datos
     foods.value = []
     searchQuery.value = ''
-    error.value = null
-    loading.value = false
   }
 
   return {

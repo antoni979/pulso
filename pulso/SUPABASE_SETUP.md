@@ -79,7 +79,47 @@ CREATE TABLE foods (
   carbs_per_100g INTEGER DEFAULT 0,
   fats_per_100g INTEGER DEFAULT 0,
   is_custom BOOLEAN DEFAULT false,
+  serving_unit TEXT, -- 'taza', 'unidad', 'cucharada', 'vaso', etc
+  serving_size_grams DECIMAL(10, 2), -- Cuántos gramos equivale 1 unidad
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create exercises table
+CREATE TABLE exercises (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  calories_per_hour INTEGER NOT NULL,
+  category TEXT,
+  intensity TEXT CHECK (intensity IN ('low', 'moderate', 'high')),
+  description TEXT,
+  is_custom BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create workouts table (tracking exercise sessions)
+CREATE TABLE workouts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  exercise_name TEXT NOT NULL,
+  duration_minutes INTEGER NOT NULL,
+  calories_burned INTEGER NOT NULL,
+  workout_date DATE NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create daily_steps table (tracking daily step count)
+CREATE TABLE daily_steps (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  steps_count INTEGER NOT NULL DEFAULT 0,
+  calories_burned INTEGER NOT NULL DEFAULT 0,
+  step_date DATE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, step_date)
 );
 
 -- Enable Row Level Security
@@ -87,6 +127,9 @@ ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE measurements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE foods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workouts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_steps ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for user_profiles
 CREATE POLICY "Users can view own profile"
@@ -152,6 +195,57 @@ CREATE POLICY "Users can delete own custom foods"
   ON foods FOR DELETE
   USING (auth.uid() = user_id AND is_custom = true);
 
+-- Create policies for exercises
+CREATE POLICY "Users can view all exercises"
+  ON exercises FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can create custom exercises"
+  ON exercises FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own custom exercises"
+  ON exercises FOR UPDATE
+  USING (auth.uid() = user_id AND is_custom = true);
+
+CREATE POLICY "Users can delete own custom exercises"
+  ON exercises FOR DELETE
+  USING (auth.uid() = user_id AND is_custom = true);
+
+-- Create policies for workouts
+CREATE POLICY "Users can view own workouts"
+  ON workouts FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own workouts"
+  ON workouts FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own workouts"
+  ON workouts FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own workouts"
+  ON workouts FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Create policies for daily_steps
+CREATE POLICY "Users can view own daily steps"
+  ON daily_steps FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own daily steps"
+  ON daily_steps FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own daily steps"
+  ON daily_steps FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own daily steps"
+  ON daily_steps FOR DELETE
+  USING (auth.uid() = user_id);
+
 -- Create function to automatically create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -174,6 +268,12 @@ CREATE INDEX idx_meals_user_id ON meals(user_id);
 CREATE INDEX idx_meals_eaten_at ON meals(eaten_at);
 CREATE INDEX idx_foods_user_id ON foods(user_id);
 CREATE INDEX idx_foods_name ON foods(name);
+CREATE INDEX idx_exercises_user_id ON exercises(user_id);
+CREATE INDEX idx_exercises_name ON exercises(name);
+CREATE INDEX idx_workouts_user_id ON workouts(user_id);
+CREATE INDEX idx_workouts_date ON workouts(workout_date);
+CREATE INDEX idx_daily_steps_user_id ON daily_steps(user_id);
+CREATE INDEX idx_daily_steps_date ON daily_steps(step_date);
 ```
 
 ## 3. Authentication Setup

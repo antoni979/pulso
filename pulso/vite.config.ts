@@ -11,11 +11,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: 'Pulso - Nutrición Inteligente',
+        name: 'Pulso',
         short_name: 'Pulso',
-        description: 'Seguimiento de nutrición y calorías con IA',
-        theme_color: '#8b5cf6',
-        background_color: '#ffffff',
+        description: 'Seguimiento nutricional inteligente y minimalista',
+        theme_color: '#0f172a',
+        background_color: '#f8fafc',
         display: 'standalone',
         start_url: '/',
         icons: [

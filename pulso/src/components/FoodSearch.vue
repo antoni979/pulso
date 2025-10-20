@@ -39,6 +39,10 @@ const mealConfig = ref({
   fats: 0
 })
 
+// Unidad de medida seleccionada
+const selectedUnit = ref<'grams' | 'serving'>('grams')
+const servingQuantity = ref(1)
+
 // Items individuales del plato (solo para análisis de audio)
 const foodItems = ref<Array<{
   name: string
@@ -64,11 +68,23 @@ onUnmounted(() => {
   foodsStore.clearSearch()
 })
 
-// Función para resetear todo
+// Función para resetear todo - VERSIÓN ROBUSTA
 const resetAll = () => {
+  // Paso 1: Limpiar timers pendientes
+  if (debounceTimeout.value) {
+    clearTimeout(debounceTimeout.value)
+    debounceTimeout.value = null
+  }
+
+  // Paso 2: Limpiar store (esto detiene loading)
+  foodsStore.clearSearch()
+
+  // Paso 3: Resetear estado del componente
   step.value = 'search'
   searchInput.value = ''
   selectedFood.value = null
+  selectedUnit.value = 'grams'
+  servingQuantity.value = 1
   foodItems.value = []
   mealConfig.value = {
     meal_type: 'lunch',
@@ -80,65 +96,109 @@ const resetAll = () => {
     fats: 0
   }
   isSaving.value = false
-  foodsStore.clearSearch()
-  if (debounceTimeout.value) {
-    clearTimeout(debounceTimeout.value)
-    debounceTimeout.value = null
-  }
+
+  // Paso 4: Limpiar recursos multimedia
   if (audioRecorder.isRecording.value) {
     audioRecorder.cancelRecording()
   }
   imageCapture.clearImage()
 }
 
-// Watch search input con debounce mejorado
-watch(searchInput, (newValue) => {
-  // Limpiar timeout anterior
+// Watch search input con debounce SUPER ROBUSTO
+watch(searchInput, (newValue, oldValue) => {
+  // Limpiar timeout anterior SIEMPRE
   if (debounceTimeout.value) {
     clearTimeout(debounceTimeout.value)
     debounceTimeout.value = null
   }
 
-  // Limpiar y validar
+  // Validar
   const cleanValue = newValue.trim()
 
-  if (cleanValue.length >= 2) {
-    // Crear nuevo timeout
-    debounceTimeout.value = setTimeout(async () => {
-      try {
-        await foodsStore.searchFoods(cleanValue)
-      } catch (error) {
-        console.error('Error en búsqueda:', error)
-      }
-    }, 400) as unknown as number
-  } else {
-    // Si el input es muy corto, limpiar inmediatamente
+  // Si está vacío o muy corto, limpiar inmediatamente
+  if (cleanValue.length < 2) {
     foodsStore.clearSearch()
+    return
   }
+
+  // Si es igual al anterior, no buscar de nuevo
+  if (cleanValue === oldValue?.trim()) {
+    return
+  }
+
+  // Crear nuevo timeout solo si hay valor válido
+  debounceTimeout.value = setTimeout(async () => {
+    try {
+      // Double-check que el input no cambió mientras esperábamos
+      if (searchInput.value.trim() === cleanValue) {
+        await foodsStore.searchFoods(cleanValue)
+      }
+    } catch (error) {
+      console.error('Error en búsqueda:', error)
+      foodsStore.clearSearch()
+    } finally {
+      debounceTimeout.value = null
+    }
+  }, 300) as unknown as number // 300ms es más rápido y responsive
 })
 
 // Seleccionar alimento y pasar a configuración
 const selectFood = (food: Food) => {
   selectedFood.value = food
-  mealConfig.value.name = `${food.name} (${mealConfig.value.grams}g)`
+
+  // Si tiene unidad de serving, usarla por defecto
+  if (food.serving_unit && food.serving_size_grams) {
+    selectedUnit.value = 'serving'
+    servingQuantity.value = 1
+    mealConfig.value.grams = food.serving_size_grams
+  } else {
+    selectedUnit.value = 'grams'
+    mealConfig.value.grams = 100
+  }
+
   calculateNutrients()
   step.value = 'configure'
 }
 
-// Calcular nutrientes basados en gramos
+// Calcular nutrientes basados en gramos o unidades
 const calculateNutrients = () => {
   if (!selectedFood.value) return
 
-  const multiplier = mealConfig.value.grams / 100
+  // Calcular gramos según la unidad seleccionada
+  let totalGrams = mealConfig.value.grams
+
+  if (selectedUnit.value === 'serving' && selectedFood.value.serving_size_grams) {
+    totalGrams = servingQuantity.value * selectedFood.value.serving_size_grams
+    mealConfig.value.grams = totalGrams
+  }
+
+  const multiplier = totalGrams / 100
   mealConfig.value.calories = Math.round(selectedFood.value.calories_per_100g * multiplier)
   mealConfig.value.protein = Math.round(selectedFood.value.protein_per_100g * multiplier)
   mealConfig.value.carbs = Math.round(selectedFood.value.carbs_per_100g * multiplier)
   mealConfig.value.fats = Math.round(selectedFood.value.fats_per_100g * multiplier)
-  mealConfig.value.name = `${selectedFood.value.name} (${mealConfig.value.grams}g)`
+
+  // Nombre con la unidad apropiada
+  if (selectedUnit.value === 'serving' && selectedFood.value.serving_unit) {
+    mealConfig.value.name = `${selectedFood.value.name} (${servingQuantity.value} ${selectedFood.value.serving_unit}${servingQuantity.value > 1 ? 's' : ''})`
+  } else {
+    mealConfig.value.name = `${selectedFood.value.name} (${totalGrams}g)`
+  }
 }
 
-// Watch gramos para recalcular
+// Watch gramos y cantidad de serving para recalcular
 watch(() => mealConfig.value.grams, calculateNutrients)
+watch(servingQuantity, calculateNutrients)
+watch(selectedUnit, () => {
+  if (selectedUnit.value === 'grams') {
+    // Al cambiar a gramos, mantener el valor actual
+    mealConfig.value.grams = mealConfig.value.grams || 100
+  } else if (selectedFood.value?.serving_size_grams) {
+    // Al cambiar a serving, poner 1 unidad
+    servingQuantity.value = servingQuantity.value || 1
+  }
+  calculateNutrients()
+})
 
 // Volver a la búsqueda
 const goBackToSearch = () => {
@@ -698,12 +758,61 @@ const processImage = async (imageBase64: string) => {
             </div>
           </div>
 
-          <!-- Cantidad (gramos) -->
+          <!-- Selector de unidades (solo para búsqueda manual con serving_unit) -->
+          <div v-if="selectedFood && selectedFood.serving_unit && selectedFood.serving_size_grams">
+            <label class="block text-sm font-bold text-gray-800 mb-3">
+              Unidad de medida
+            </label>
+            <div class="grid grid-cols-2 gap-3 mb-4">
+              <button
+                @click="selectedUnit = 'serving'"
+                :class="selectedUnit === 'serving'
+                  ? 'bg-primary-500 text-white border-primary-600'
+                  : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'"
+                class="p-3 border-2 rounded-xl font-bold transition-all"
+              >
+                {{ selectedFood.serving_unit }}
+              </button>
+              <button
+                @click="selectedUnit = 'grams'"
+                :class="selectedUnit === 'grams'
+                  ? 'bg-primary-500 text-white border-primary-600'
+                  : 'bg-gray-50 text-gray-700 border-gray-300 hover:bg-gray-100'"
+                class="p-3 border-2 rounded-xl font-bold transition-all"
+              >
+                gramos
+              </button>
+            </div>
+          </div>
+
+          <!-- Cantidad -->
           <div>
             <label class="block text-sm font-bold text-gray-800 mb-3">
-              Cantidad (gramos)
+              <span v-if="selectedUnit === 'serving' && selectedFood?.serving_unit">
+                Cantidad ({{ selectedFood.serving_unit }}s)
+              </span>
+              <span v-else>
+                Cantidad (gramos)
+              </span>
             </label>
+
+            <!-- Input de serving quantity -->
+            <div v-if="selectedUnit === 'serving' && selectedFood?.serving_unit" class="space-y-2">
+              <input
+                v-model.number="servingQuantity"
+                type="number"
+                min="0.5"
+                step="0.5"
+                class="w-full px-4 py-4 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition font-bold text-3xl text-center"
+              />
+              <p class="text-xs text-gray-500 text-center">
+                = {{ mealConfig.grams }}g ({{ selectedFood.serving_size_grams }}g por {{ selectedFood.serving_unit }})
+              </p>
+            </div>
+
+            <!-- Input de gramos -->
             <input
+              v-else
               v-model.number="mealConfig.grams"
               type="number"
               min="1"
