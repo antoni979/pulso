@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="115" fill="url(#gradient)"/>
+  <defs>
+    <linearGradient id="gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="50%" stop-color="#ec4899"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(256, 256)">
+    <!-- Heart pulse icon representing "Pulso" -->
+    <path d="M0 -20 L20 -60 L40 0 L60 -80 L80 -20 L100 -40" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(-50, 20)"/>
+    <circle cx="0" cy="50" r="12" fill="white"/>
+  </g>
+  <text x="256" y="400" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle">PULSO</text>
+</svg>
