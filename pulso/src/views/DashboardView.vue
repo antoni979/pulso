@@ -6,6 +6,7 @@ import { useWorkoutsStore } from '@/stores/workouts'
 import { useStepsStore } from '@/stores/steps'
 import { useCaloriesCalculation } from '@/composables/useCaloriesCalculation'
 import { useSelectedDate } from '@/composables/useSelectedDate'
+import { useWeeklyBalance } from '@/composables/useWeeklyBalance'
 import { useRouter } from 'vue-router'
 import FoodSearch from '@/components/FoodSearch.vue'
 import WorkoutSearch from '@/components/WorkoutSearch.vue'
@@ -18,6 +19,7 @@ const stepsStore = useStepsStore()
 const router = useRouter()
 
 const caloriesCalc = useCaloriesCalculation()
+const weeklyBalance = useWeeklyBalance()
 
 // Sistema centralizado de fecha
 const { selectedDate, isToday, isYesterday, dateLabel, goToToday, goToYesterday } = useSelectedDate()
@@ -44,6 +46,7 @@ watch(selectedDate, async () => {
 
 onMounted(async () => {
   await loadAllDataForSelectedDate()
+  await weeklyBalance.loadWeeklyBalance()
 })
 
 const handleSignOut = async () => {
@@ -94,12 +97,31 @@ const handleStepsSaved = async () => {
   await loadAllDataForSelectedDate()
   showStepsInput.value = false
 }
+
+const goToDate = async (dateString: string) => {
+  // Convertir el string de fecha a objeto Date
+  const parts = dateString.split('-')
+  const year = parseInt(parts[0] || '0', 10)
+  const month = parseInt(parts[1] || '0', 10)
+  const day = parseInt(parts[2] || '0', 10)
+
+  const targetDate = new Date(year, month - 1, day)
+
+  // Cambiar la fecha seleccionada
+  selectedDate.value = targetDate
+
+  // Cambiar a la pestaña de historial para ver las comidas
+  activeTab.value = 'history'
+
+  // Cargar los datos de ese día
+  await loadAllDataForSelectedDate()
+}
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-50">
     <!-- Header minimalista -->
-    <header class="bg-white border-b border-slate-200/60 sticky top-0 z-20">
+    <header class="bg-white/95 backdrop-blur-xl border-b border-slate-200/60 sticky top-0 z-50 shadow-sm safe-top">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
@@ -144,33 +166,38 @@ const handleStepsSaved = async () => {
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
       <!-- Selector de Fecha -->
-      <div class="mb-6 bg-white rounded-2xl shadow-md border border-gray-200 p-4">
-        <div class="flex items-center justify-between">
+      <div class="mb-6 bg-gradient-to-br from-white to-primary-50/30 rounded-2xl shadow-md border border-primary-200 p-5">
+        <div class="flex items-center justify-between gap-3">
           <!-- Botón Ayer -->
           <button
             @click="goToYesterday"
-            :class="isYesterday ? 'bg-primary-500 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all"
+            :class="isYesterday ? 'bg-primary-500 text-white shadow-lg' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'"
+            class="flex items-center space-x-2 px-3 py-2.5 rounded-xl font-semibold transition-all"
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
-            <span>Ayer</span>
+            <span class="hidden sm:inline">Ayer</span>
           </button>
 
           <!-- Indicador Central con Fecha -->
-          <div class="flex flex-col items-center">
-            <div class="flex items-center space-x-2 mb-1">
+          <div class="flex-1 flex flex-col items-center justify-center bg-white rounded-xl p-3 border border-primary-200">
+            <div class="flex items-center space-x-2">
               <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span class="text-2xl font-black text-gray-900">{{ dateLabel }}</span>
+              <div class="text-center">
+                <div class="text-xl sm:text-2xl font-black text-gray-900">{{ dateLabel }}</div>
+                <div class="text-xs text-gray-500 font-medium">
+                  {{ selectedDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) }}
+                </div>
+              </div>
             </div>
-            <div v-if="isToday" class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center space-x-1">
+            <div v-if="isToday" class="mt-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center space-x-1">
               <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
               <span>Hoy</span>
             </div>
-            <div v-else-if="isYesterday" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
+            <div v-else-if="isYesterday" class="mt-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
               Ayer
             </div>
           </div>
@@ -178,11 +205,11 @@ const handleStepsSaved = async () => {
           <!-- Botón Hoy -->
           <button
             @click="goToToday"
-            :class="isToday ? 'bg-primary-500 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
-            class="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all"
+            :class="isToday ? 'bg-primary-500 text-white shadow-lg' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'"
+            class="flex items-center space-x-2 px-3 py-2.5 rounded-xl font-semibold transition-all"
           >
-            <span>Hoy</span>
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span class="hidden sm:inline">Hoy</span>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -290,10 +317,85 @@ const handleStepsSaved = async () => {
         <div class="p-4">
           <!-- Estadísticas Tab -->
           <div v-if="activeTab === 'stats'" class="space-y-4">
-            <div class="text-center py-12">
+            <!-- Resumen semanal -->
+            <div v-if="weeklyBalance.loading.value" class="text-center py-12">
+              <div class="inline-block w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+              <p class="text-gray-600 mt-4 font-medium">Cargando estadísticas...</p>
+            </div>
+
+            <div v-else-if="weeklyBalance.weeklyData.value.length > 0" class="space-y-4">
+              <!-- Resumen de la semana -->
+              <div class="bg-gradient-to-br from-primary-50 to-blue-50 rounded-xl p-4 border-2 border-primary-200">
+                <h4 class="text-sm font-bold text-gray-700 mb-3">Resumen de los últimos 7 días</h4>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="bg-white rounded-lg p-3 text-center">
+                    <p class="text-xs text-gray-600 mb-1">Balance Total</p>
+                    <p :class="weeklyBalance.totalDeficit.value < 0 ? 'text-green-600' : 'text-orange-600'" class="text-2xl font-black">
+                      {{ weeklyBalance.totalDeficit.value }}
+                    </p>
+                    <p class="text-xs text-gray-500">kcal</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-3 text-center">
+                    <p class="text-xs text-gray-600 mb-1">Promedio Diario</p>
+                    <p :class="weeklyBalance.averageBalance.value < 0 ? 'text-green-600' : 'text-orange-600'" class="text-2xl font-black">
+                      {{ weeklyBalance.averageBalance.value }}
+                    </p>
+                    <p class="text-xs text-gray-500">kcal/día</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Gráfico de días -->
+              <div class="space-y-2">
+                <h4 class="text-sm font-bold text-gray-700 mb-2">Balance por día (click para editar)</h4>
+                <div
+                  v-for="day in weeklyBalance.weeklyData.value"
+                  :key="day.date"
+                  @click="goToDate(day.date)"
+                  class="bg-gray-50 rounded-lg p-3 border-2 border-primary-200 hover:border-primary-400 hover:bg-primary-50 cursor-pointer active:scale-[0.98] transition-all"
+                  :class="{
+                    'opacity-60': !day.hasData
+                  }"
+                >
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-sm font-bold text-gray-900">{{ day.dateLabel }}</span>
+                      <span class="text-xs text-gray-500">{{ day.date }}</span>
+                      <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </div>
+                    <div v-if="day.hasData" class="text-right">
+                      <p :class="day.balance < 0 ? 'text-green-600' : 'text-orange-600'" class="text-lg font-black">
+                        {{ day.balance > 0 ? '+' : '' }}{{ day.balance }}
+                      </p>
+                      <p class="text-xs text-gray-500">kcal</p>
+                    </div>
+                    <div v-else class="text-gray-400 text-xs font-medium">Sin datos - Click para agregar</div>
+                  </div>
+
+                  <!-- Barra de progreso -->
+                  <div v-if="day.hasData" class="mt-2">
+                    <div class="flex items-center justify-between text-xs mb-1">
+                      <span class="text-primary-600 font-semibold">{{ day.consumed }} consumidas</span>
+                      <span class="text-red-600 font-semibold">{{ day.burned }} quemadas</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        class="h-2 rounded-full transition-all"
+                        :class="day.balance < 0 ? 'bg-green-500' : 'bg-orange-500'"
+                        :style="{ width: Math.min(Math.abs(day.balance) / 1000 * 100, 100) + '%' }"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="text-center py-12">
               <span class="text-6xl mb-4 block">📊</span>
-              <p class="text-gray-700 font-bold text-lg">Estadísticas semanales</p>
-              <p class="text-gray-500 mt-2">Próximamente disponible</p>
+              <p class="text-gray-700 font-bold text-lg">Sin datos disponibles</p>
+              <p class="text-gray-500 mt-2">Empieza a registrar comidas y ejercicios</p>
             </div>
           </div>
 

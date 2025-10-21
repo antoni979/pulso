@@ -20,7 +20,8 @@ export function useCaloriesCalculation() {
   const workoutsStore = useWorkoutsStore()
   const stepsStore = useStepsStore()
 
-  // Calcular TMB usando Harris-Benedict
+  // Calcular TMB BASAL usando Harris-Benedict (sin factor de actividad)
+  // El factor de actividad NO se usa porque ya contamos pasos y ejercicios específicamente
   const userTMB = computed(() => {
     const profile = authStore.profile
     if (!profile || !profile.current_weight || !profile.height || !profile.birth_date) {
@@ -32,7 +33,7 @@ export function useCaloriesCalculation() {
     const birthDate = new Date(profile.birth_date)
     const age = new Date().getFullYear() - birthDate.getFullYear()
 
-    // Fórmula Harris-Benedict
+    // Fórmula Harris-Benedict (TMB basal, sin multiplicar por factor de actividad)
     let tmb = 0
     if (profile.sex === 'male') {
       tmb = 10 * weight + 6.25 * height - 5 * age + 5
@@ -42,17 +43,9 @@ export function useCaloriesCalculation() {
       tmb = 10 * weight + 6.25 * height - 5 * age - 78 // Promedio
     }
 
-    // Aplicar factor de actividad
-    const activityFactors: Record<string, number> = {
-      sedentary: 1.2,
-      light: 1.375,
-      moderate: 1.55,
-      active: 1.725,
-      very_active: 1.9
-    }
-    const factor = activityFactors[profile.activity_level || 'moderate'] || 1.55
-
-    return Math.round(tmb * factor)
+    // NO aplicamos el factor de actividad aquí porque sumamos pasos y ejercicios específicamente
+    // Esto evita la doble contabilización de calorías
+    return Math.round(tmb)
   })
 
   // Calorías de pasos

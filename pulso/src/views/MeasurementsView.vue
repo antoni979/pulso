@@ -126,9 +126,9 @@ const goBack = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50/30 to-white">
+  <div class="min-h-screen bg-gradient-to-br from-gray-50 via-primary-50/30 to-white pb-20">
     <!-- Header -->
-    <header class="bg-white/90 backdrop-blur-xl border-b-2 border-primary-100 sticky top-0 z-20 shadow-sm">
+    <header class="bg-white/95 backdrop-blur-xl border-b-2 border-primary-100 sticky top-0 z-50 shadow-sm safe-top">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
