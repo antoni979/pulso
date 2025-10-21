@@ -1,99 +1,104 @@
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { supabase } from '@/lib/supabase'
+import { useMealsStore } from '@/stores/meals'
+import { useWorkoutsStore } from '@/stores/workouts'
+import { useStepsStore } from '@/stores/steps'
 
 /**
- * Composable para obtener los cálculos de calorías desde Supabase
+ * Composable para calcular el balance calórico usando datos de los stores
  *
- * Usa las funciones SQL del servidor para:
- * - Calcular TMB (Harris-Benedict)
- * - Obtener calorías de pasos, ejercicio y termogénesis
- * - Calcular balance calórico (consumidas - quemadas)
+ * Calcula en tiempo real basándose en:
+ * - Comidas consumidas (del store de meals)
+ * - Ejercicios realizados (del store de workouts)
+ * - Pasos caminados (del store de steps)
+ * - TMB y objetivo de déficit (del perfil del usuario)
  */
-
-interface CalorieBalance {
-  consumed: number
-  tmb: number
-  steps_calories: number
-  workout_calories: number
-  thermic_effect: number
-  total_burned: number
-  balance: number
-  deficit_goal: number
-}
 
 export function useCaloriesCalculation() {
   const authStore = useAuthStore()
+  const mealsStore = useMealsStore()
+  const workoutsStore = useWorkoutsStore()
+  const stepsStore = useStepsStore()
 
-  const calorieData = ref<CalorieBalance>({
-    consumed: 0,
-    tmb: 0,
-    steps_calories: 0,
-    workout_calories: 0,
-    thermic_effect: 0,
-    total_burned: 0,
-    balance: 0,
-    deficit_goal: -500
+  // Calcular TMB usando Harris-Benedict
+  const userTMB = computed(() => {
+    const profile = authStore.profile
+    if (!profile || !profile.current_weight || !profile.height || !profile.birth_date) {
+      return 1800 // Valor por defecto
+    }
+
+    const weight = Number(profile.current_weight)
+    const height = profile.height
+    const birthDate = new Date(profile.birth_date)
+    const age = new Date().getFullYear() - birthDate.getFullYear()
+
+    // Fórmula Harris-Benedict
+    let tmb = 0
+    if (profile.sex === 'male') {
+      tmb = 10 * weight + 6.25 * height - 5 * age + 5
+    } else if (profile.sex === 'female') {
+      tmb = 10 * weight + 6.25 * height - 5 * age - 161
+    } else {
+      tmb = 10 * weight + 6.25 * height - 5 * age - 78 // Promedio
+    }
+
+    // Aplicar factor de actividad
+    const activityFactors: Record<string, number> = {
+      sedentary: 1.2,
+      light: 1.375,
+      moderate: 1.55,
+      active: 1.725,
+      very_active: 1.9
+    }
+    const factor = activityFactors[profile.activity_level || 'moderate'] || 1.55
+
+    return Math.round(tmb * factor)
   })
 
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  // Calorías de pasos
+  const caloriesFromSteps = computed(() => stepsStore.selectedDateStepsCalories)
 
-  // Fetch calorie balance from Supabase function
-  const fetchCalorieBalance = async () => {
-    if (!authStore.user) return
+  // Calorías de ejercicio
+  const caloriesFromWorkouts = computed(() => workoutsStore.selectedDateTotalCaloriesBurned)
 
-    loading.value = true
-    error.value = null
+  // Efecto termogénico (10% de calorías consumidas)
+  const thermogenicEffect = computed(() => {
+    return Math.round(mealsStore.selectedDateTotals.calories * 0.1)
+  })
 
-    try {
-      const { data, error: rpcError } = await supabase
-        .rpc('get_today_calorie_balance', { p_user_id: authStore.user.id })
+  // Total de calorías quemadas
+  const totalCaloriesBurned = computed(() => {
+    return userTMB.value + caloriesFromSteps.value + caloriesFromWorkouts.value + thermogenicEffect.value
+  })
 
-      if (rpcError) throw rpcError
+  // Calorías consumidas
+  const caloriesConsumed = computed(() => mealsStore.selectedDateTotals.calories)
 
-      // La función retorna un array con un solo objeto
-      if (data && data.length > 0) {
-        calorieData.value = data[0]
-      }
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Error fetching calorie balance'
-      console.error('Error fetching calorie balance:', e)
-    } finally {
-      loading.value = false
-    }
+  // Balance neto (positivo = superávit, negativo = déficit)
+  const netCalories = computed(() => caloriesConsumed.value - totalCaloriesBurned.value)
+
+  // Objetivo de déficit
+  const deficitGoal = computed(() => authStore.profile?.caloric_deficit_goal || -500)
+
+  // Función dummy para compatibilidad
+  const refresh = () => {
+    // No hace nada, los computed son reactivos automáticamente
   }
 
-  // Load on mount
-  onMounted(() => {
-    fetchCalorieBalance()
-  })
-
-  // Watch for auth changes
-  watch(() => authStore.user, () => {
-    if (authStore.user) {
-      fetchCalorieBalance()
-    }
-  })
-
   return {
-    // Componentes del gasto calórico (wrapped as computed for reactivity)
-    userTMB: computed(() => calorieData.value.tmb),
-    caloriesFromSteps: computed(() => calorieData.value.steps_calories),
-    caloriesFromWorkouts: computed(() => calorieData.value.workout_calories),
-    thermogenicEffect: computed(() => calorieData.value.thermic_effect),
+    // Componentes del gasto calórico
+    userTMB,
+    caloriesFromSteps,
+    caloriesFromWorkouts,
+    thermogenicEffect,
 
     // Totales
-    totalCaloriesBurned: computed(() => calorieData.value.total_burned),
-    caloriesConsumed: computed(() => calorieData.value.consumed),
-    netCalories: computed(() => calorieData.value.balance),
-    deficitGoal: computed(() => calorieData.value.deficit_goal),
-
-    // Estado
-    loading,
-    error,
+    totalCaloriesBurned,
+    caloriesConsumed,
+    netCalories,
+    deficitGoal,
 
     // Métodos
-    refresh: fetchCalorieBalance
+    refresh
   }
 }

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useMealsStore } from '@/stores/meals'
 import { useWorkoutsStore } from '@/stores/workouts'
 import { useStepsStore } from '@/stores/steps'
 import { useCaloriesCalculation } from '@/composables/useCaloriesCalculation'
-import { useWeeklyBalance } from '@/composables/useWeeklyBalance'
+import { useSelectedDate } from '@/composables/useSelectedDate'
 import { useRouter } from 'vue-router'
 import FoodSearch from '@/components/FoodSearch.vue'
 import WorkoutSearch from '@/components/WorkoutSearch.vue'
@@ -18,19 +18,32 @@ const stepsStore = useStepsStore()
 const router = useRouter()
 
 const caloriesCalc = useCaloriesCalculation()
-const weeklyBalance = useWeeklyBalance()
+
+// Sistema centralizado de fecha
+const { selectedDate, isToday, isYesterday, dateLabel, goToToday, goToYesterday } = useSelectedDate()
 
 const showFoodSearch = ref(false)
 const showWorkoutSearch = ref(false)
 const showStepsInput = ref(false)
 const activeTab = ref<'stats' | 'macros' | 'history'>('stats')
 
-onMounted(async () => {
+// Función para cargar todos los datos de una fecha
+const loadAllDataForSelectedDate = async () => {
   await Promise.all([
-    mealsStore.loadTodayMeals(),
-    workoutsStore.loadTodayWorkouts(),
-    stepsStore.loadTodaySteps()
+    mealsStore.loadMealsForDate(),
+    workoutsStore.loadWorkoutsForDate(),
+    stepsStore.loadStepsForDate()
   ])
+  // Los computed son reactivos, no necesitamos refresh
+}
+
+// Watch: cuando cambia la fecha seleccionada, recargar todo
+watch(selectedDate, async () => {
+  await loadAllDataForSelectedDate()
+})
+
+onMounted(async () => {
+  await loadAllDataForSelectedDate()
 })
 
 const handleSignOut = async () => {
@@ -38,15 +51,14 @@ const handleSignOut = async () => {
   router.push('/auth')
 }
 
-const handleFoodSaved = () => {
-  caloriesCalc.refresh()
-  weeklyBalance.refresh()
+const handleFoodSaved = async () => {
+  // Recargar todos los datos para asegurar que los totales se actualicen
+  await loadAllDataForSelectedDate()
   showFoodSearch.value = false
 }
 
-const handleWorkoutSaved = () => {
-  caloriesCalc.refresh()
-  weeklyBalance.refresh()
+const handleWorkoutSaved = async () => {
+  await loadAllDataForSelectedDate()
   showWorkoutSearch.value = false
 }
 
@@ -78,9 +90,8 @@ const openStepsInput = () => {
   showStepsInput.value = true
 }
 
-const handleStepsSaved = () => {
-  caloriesCalc.refresh()
-  weeklyBalance.refresh()
+const handleStepsSaved = async () => {
+  await loadAllDataForSelectedDate()
   showStepsInput.value = false
 }
 </script>
@@ -132,6 +143,52 @@ const handleStepsSaved = () => {
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24">
+      <!-- Selector de Fecha -->
+      <div class="mb-6 bg-white rounded-2xl shadow-md border border-gray-200 p-4">
+        <div class="flex items-center justify-between">
+          <!-- Botón Ayer -->
+          <button
+            @click="goToYesterday"
+            :class="isYesterday ? 'bg-primary-500 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            class="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>Ayer</span>
+          </button>
+
+          <!-- Indicador Central con Fecha -->
+          <div class="flex flex-col items-center">
+            <div class="flex items-center space-x-2 mb-1">
+              <svg class="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span class="text-2xl font-black text-gray-900">{{ dateLabel }}</span>
+            </div>
+            <div v-if="isToday" class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold flex items-center space-x-1">
+              <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span>Hoy</span>
+            </div>
+            <div v-else-if="isYesterday" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
+              Ayer
+            </div>
+          </div>
+
+          <!-- Botón Hoy -->
+          <button
+            @click="goToToday"
+            :class="isToday ? 'bg-primary-500 text-white shadow-lg' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            class="flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all"
+          >
+            <span>Hoy</span>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Action Buttons minimalistas -->
       <div class="mb-8">
         <div class="grid grid-cols-3 gap-3">
@@ -179,7 +236,7 @@ const handleStepsSaved = () => {
       <!-- Balance del Día (Resumen compacto) -->
       <div class="bg-white rounded-xl shadow-lg p-4 mb-6 border border-gray-200">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-bold text-gray-700 uppercase">Balance de Hoy</h3>
+          <h3 class="text-sm font-bold text-gray-700 uppercase">Balance de {{ dateLabel }}</h3>
           <span class="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs font-bold">
             Obj: {{ caloriesCalc.deficitGoal }} kcal
           </span>
@@ -275,7 +332,7 @@ const handleStepsSaved = () => {
           <div v-if="activeTab === 'history'" class="space-y-4">
             <!-- Comidas -->
             <div>
-              <h4 class="text-sm font-bold text-gray-700 mb-2">Comidas de hoy</h4>
+              <h4 class="text-sm font-bold text-gray-700 mb-2">Comidas de {{ dateLabel.toLowerCase() }}</h4>
               <div v-if="mealsStore.todayMeals.length === 0" class="text-center py-8 text-gray-500 text-sm">
                 No hay comidas registradas
               </div>
@@ -295,7 +352,7 @@ const handleStepsSaved = () => {
 
             <!-- Ejercicios -->
             <div>
-              <h4 class="text-sm font-bold text-gray-700 mb-2">Entrenamientos de hoy</h4>
+              <h4 class="text-sm font-bold text-gray-700 mb-2">Entrenamientos de {{ dateLabel.toLowerCase() }}</h4>
               <div v-if="workoutsStore.todayWorkouts.length === 0" class="text-center py-8 text-gray-500 text-sm">
                 No hay entrenamientos registrados
               </div>

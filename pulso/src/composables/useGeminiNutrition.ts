@@ -38,7 +38,15 @@ export function useGeminiNutrition() {
       const genAI = new GoogleGenerativeAI(apiKey)
 
       // Usar Gemini 2.0 Flash que soporta imágenes y es rápido
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: {
+          temperature: 0.4,
+          topK: 32,
+          topP: 1,
+          maxOutputTokens: 2048,
+        }
+      })
 
       // Extraer solo la parte base64 (sin el prefijo data:image/...)
       const parts = imageBase64.split(',')
@@ -127,7 +135,12 @@ Imagen: Plato con pechuga de pollo a la plancha, arroz blanco y brócoli al vapo
   ]
 }`
 
-      const result = await model.generateContent([
+      // Crear promesa con timeout de 30 segundos
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: El análisis de la imagen tardó demasiado. Por favor, inténtalo de nuevo.')), 30000)
+      })
+
+      const generatePromise = model.generateContent([
         {
           inlineData: {
             mimeType,
@@ -137,7 +150,10 @@ Imagen: Plato con pechuga de pollo a la plancha, arroz blanco y brócoli al vapo
         { text: prompt }
       ])
 
-      const response = await result.response
+      // Esperar la primera promesa que se resuelva (generación o timeout)
+      const result = await Promise.race([generatePromise, timeoutPromise])
+
+      const response = result.response
       const text = response.text()
 
       // Extraer JSON del texto (puede venir con markdown)
@@ -243,7 +259,12 @@ Respuesta esperada:
   ]
 }`
 
-      const result = await model.generateContent([
+      // Crear promesa con timeout de 30 segundos
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: El análisis del audio tardó demasiado. Por favor, inténtalo de nuevo.')), 30000)
+      })
+
+      const generatePromise = model.generateContent([
         {
           inlineData: {
             mimeType: 'audio/webm',
@@ -253,7 +274,10 @@ Respuesta esperada:
         { text: prompt }
       ])
 
-      const response = await result.response
+      // Esperar la primera promesa que se resuelva (generación o timeout)
+      const result = await Promise.race([generatePromise, timeoutPromise])
+
+      const response = result.response
       const text = response.text()
 
       // Extraer JSON del texto (puede venir con markdown)

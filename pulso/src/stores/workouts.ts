@@ -2,48 +2,48 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase, type Workout } from '@/lib/supabase'
 import { useAuthStore } from './auth'
+import { useSelectedDate } from '@/composables/useSelectedDate'
 
 export const useWorkoutsStore = defineStore('workouts', () => {
   const workouts = ref<Workout[]>([])
   const loading = ref(false)
 
-  // Get today's workouts
-  const todayWorkouts = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return workouts.value.filter(workout => {
-      const workoutDate = new Date(workout.workout_date)
-      workoutDate.setHours(0, 0, 0, 0)
-      return workoutDate.getTime() === today.getTime()
-    })
-  })
+  // Los workouts ya vienen filtrados por fecha desde loadWorkoutsForDate
+  const selectedDateWorkouts = computed(() => workouts.value)
 
-  // Today's total calories burned
-  const todayTotalCaloriesBurned = computed(() => {
-    return todayWorkouts.value.reduce(
+  // Total calories burned for selected date
+  const selectedDateTotalCaloriesBurned = computed(() => {
+    return workouts.value.reduce(
       (total, workout) => total + workout.calories_burned,
       0
     )
   })
 
-  // Load today's workouts
-  async function loadTodayWorkouts() {
+  // Backwards compatibility aliases
+  const todayWorkouts = computed(() => selectedDateWorkouts.value)
+  const todayTotalCaloriesBurned = computed(() => selectedDateTotalCaloriesBurned.value)
+
+  // Load workouts for specific date
+  async function loadWorkoutsForDate(date?: Date) {
     const authStore = useAuthStore()
     if (!authStore.user) return
 
+    const { selectedDate } = useSelectedDate()
+    const targetDate = date || selectedDate.value
+
     loading.value = true
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
+      const startOfDay = new Date(targetDate)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(startOfDay)
+      endOfDay.setDate(endOfDay.getDate() + 1)
 
       const { data, error } = await supabase
         .from('workouts')
         .select('*')
         .eq('user_id', authStore.user.id)
-        .gte('workout_date', today.toISOString())
-        .lt('workout_date', tomorrow.toISOString())
+        .gte('workout_date', startOfDay.toISOString())
+        .lt('workout_date', endOfDay.toISOString())
         .order('workout_date', { ascending: false })
 
       if (error) throw error
@@ -53,6 +53,12 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // Load today's workouts (backwards compatibility)
+  async function loadTodayWorkouts() {
+    const { selectedDate } = useSelectedDate()
+    await loadWorkoutsForDate(selectedDate.value)
   }
 
   // Add workout
@@ -109,7 +115,10 @@ export const useWorkoutsStore = defineStore('workouts', () => {
     loading,
     todayWorkouts,
     todayTotalCaloriesBurned,
+    selectedDateWorkouts,
+    selectedDateTotalCaloriesBurned,
     loadTodayWorkouts,
+    loadWorkoutsForDate,
     addWorkout,
     deleteWorkout
   }

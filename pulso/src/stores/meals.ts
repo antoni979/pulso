@@ -2,25 +2,19 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { supabase, type Meal } from '@/lib/supabase'
 import { useAuthStore } from './auth'
+import { useSelectedDate } from '@/composables/useSelectedDate'
 
 export const useMealsStore = defineStore('meals', () => {
   const meals = ref<Meal[]>([])
   const loading = ref(false)
 
-  // Get today's meals
-  const todayMeals = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return meals.value.filter(meal => {
-      const mealDate = new Date(meal.eaten_at)
-      mealDate.setHours(0, 0, 0, 0)
-      return mealDate.getTime() === today.getTime()
-    })
-  })
+  // Los meals ya vienen filtrados por fecha desde loadMealsForDate
+  // NO necesitamos filtrar en computed, usamos directamente lo que cargamos
+  const selectedDateMeals = computed(() => meals.value)
 
-  // Today's totals
-  const todayTotals = computed(() => {
-    return todayMeals.value.reduce(
+  // Totals for selected date
+  const selectedDateTotals = computed(() => {
+    return meals.value.reduce(
       (totals, meal) => ({
         calories: totals.calories + meal.calories,
         protein: totals.protein + meal.protein,
@@ -31,34 +25,41 @@ export const useMealsStore = defineStore('meals', () => {
     )
   })
 
-  // Meals by type for today
+  // Meals by type for selected date
   const mealsByType = computed(() => {
     return {
-      breakfast: todayMeals.value.filter(m => m.meal_type === 'breakfast'),
-      lunch: todayMeals.value.filter(m => m.meal_type === 'lunch'),
-      dinner: todayMeals.value.filter(m => m.meal_type === 'dinner'),
-      snack: todayMeals.value.filter(m => m.meal_type === 'snack')
+      breakfast: meals.value.filter(m => m.meal_type === 'breakfast'),
+      lunch: meals.value.filter(m => m.meal_type === 'lunch'),
+      dinner: meals.value.filter(m => m.meal_type === 'dinner'),
+      snack: meals.value.filter(m => m.meal_type === 'snack')
     }
   })
 
-  // Load today's meals
-  async function loadTodayMeals() {
+  // Backwards compatibility aliases
+  const todayMeals = computed(() => selectedDateMeals.value)
+  const todayTotals = computed(() => selectedDateTotals.value)
+
+  // Load meals for selected date
+  async function loadMealsForDate(date?: Date) {
     const authStore = useAuthStore()
     if (!authStore.user) return
 
+    const { selectedDate } = useSelectedDate()
+    const targetDate = date || selectedDate.value
+
     loading.value = true
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
+      const startOfDay = new Date(targetDate)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(startOfDay)
+      endOfDay.setDate(endOfDay.getDate() + 1)
 
       const { data, error } = await supabase
         .from('meals')
         .select('*')
         .eq('user_id', authStore.user.id)
-        .gte('eaten_at', today.toISOString())
-        .lt('eaten_at', tomorrow.toISOString())
+        .gte('eaten_at', startOfDay.toISOString())
+        .lt('eaten_at', endOfDay.toISOString())
         .order('eaten_at', { ascending: false })
 
       if (error) throw error
@@ -68,6 +69,12 @@ export const useMealsStore = defineStore('meals', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  // Load today's meals (backwards compatibility)
+  async function loadTodayMeals() {
+    const { selectedDate } = useSelectedDate()
+    await loadMealsForDate(selectedDate.value)
   }
 
   // Add meal
@@ -151,8 +158,11 @@ export const useMealsStore = defineStore('meals', () => {
     loading,
     todayMeals,
     todayTotals,
+    selectedDateMeals,
+    selectedDateTotals,
     mealsByType,
     loadTodayMeals,
+    loadMealsForDate,
     addMeal,
     updateMeal,
     deleteMeal
