@@ -225,11 +225,16 @@ const handleClose = () => {
 
 // Guardar comida
 const saveMeal = async () => {
-  if (!selectedFood.value || mealConfig.value.grams <= 0) return
+  if (!selectedFood.value || mealConfig.value.grams <= 0) {
+    console.error('Validación falló - selectedFood:', !!selectedFood.value, 'grams:', mealConfig.value.grams)
+    return
+  }
+
+  console.log('[DEBUG] Guardando comida desde búsqueda manual:', mealConfig.value)
 
   isSaving.value = true
   try {
-    await mealsStore.addMeal({
+    const result = await mealsStore.addMeal({
       name: mealConfig.value.name,
       meal_type: mealConfig.value.meal_type,
       calories: mealConfig.value.calories,
@@ -238,11 +243,19 @@ const saveMeal = async () => {
       fats: mealConfig.value.fats,
       eaten_at: new Date().toISOString()
     })
+
+    console.log('[DEBUG] Resultado de addMeal:', result)
+
+    if (result?.error) {
+      throw result.error
+    }
+
+    console.log('[DEBUG] Comida guardada exitosamente')
     emit('saved')
     emit('close')
   } catch (error) {
-    console.error('Error al guardar comida:', error)
-    alert('Error al guardar la comida')
+    console.error('[ERROR] Error al guardar comida:', error)
+    alert(`Error al guardar la comida: ${error instanceof Error ? error.message : 'Error desconocido'}`)
   } finally {
     isSaving.value = false
   }
@@ -324,11 +337,16 @@ const cancelAudioRecording = () => {
 
 // Guardar comida desde audio (sin validación de selectedFood)
 const saveMealFromAudio = async () => {
-  if (mealConfig.value.grams <= 0 || mealConfig.value.calories <= 0) return
+  if (mealConfig.value.grams <= 0 || mealConfig.value.calories <= 0) {
+    console.error('Validación falló - grams:', mealConfig.value.grams, 'calories:', mealConfig.value.calories)
+    return
+  }
+
+  console.log('[DEBUG] Guardando comida desde audio:', mealConfig.value)
 
   isSaving.value = true
   try {
-    await mealsStore.addMeal({
+    const result = await mealsStore.addMeal({
       name: mealConfig.value.name,
       meal_type: mealConfig.value.meal_type,
       calories: mealConfig.value.calories,
@@ -337,11 +355,19 @@ const saveMealFromAudio = async () => {
       fats: mealConfig.value.fats,
       eaten_at: new Date().toISOString()
     })
+
+    console.log('[DEBUG] Resultado de addMeal:', result)
+
+    if (result?.error) {
+      throw result.error
+    }
+
+    console.log('[DEBUG] Comida guardada exitosamente')
     emit('saved')
     emit('close')
   } catch (error) {
-    console.error('Error al guardar comida:', error)
-    alert('Error al guardar la comida')
+    console.error('[ERROR] Error al guardar comida:', error)
+    alert(`Error al guardar la comida: ${error instanceof Error ? error.message : 'Error desconocido'}`)
   } finally {
     isSaving.value = false
   }
