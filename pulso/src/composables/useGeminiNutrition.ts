@@ -304,11 +304,167 @@ Respuesta esperada:
     }
   }
 
+  const analyzeTextNutrition = async (textDescription: string): Promise<NutritionAnalysis> => {
+    isAnalyzing.value = true
+    error.value = null
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+      if (!apiKey) {
+        throw new Error('VITE_GEMINI_API_KEY no está configurada')
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey)
+
+      // Usar Gemini 2.0 Flash
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+
+      const prompt = `Eres un experto nutricionista. Analiza esta descripción de comida que ha consumido un usuario:
+
+"${textDescription}"
+
+Debes extraer:
+1. El tipo de comida (desayuno/breakfast, almuerzo/lunch, cena/dinner, o snack)
+2. Nombre descriptivo del plato completo
+3. DESGLOSE INDIVIDUAL de cada alimento con su cantidad en gramos (si no se especifica cantidad, estima una porción estándar razonable)
+4. Análisis nutricional EXACTO basado en bases de datos nutricionales estándar (USDA, tablas nutricionales españolas)
+
+Sé MUY PRECISO con los valores nutricionales. Usa datos reales de alimentos.
+
+IMPORTANTE: Si el usuario NO especifica cantidades, estima porciones estándar razonables (ej: pollo 150-200g, arroz 100-150g, ensalada 100g, etc.)
+
+Responde SOLO con un objeto JSON válido, sin texto adicional:
+{
+  "meal_type": "breakfast" | "lunch" | "dinner" | "snack",
+  "name": "nombre descriptivo del plato completo",
+  "grams": suma total de gramos de todos los items,
+  "calories": suma total de calorías,
+  "protein": suma total de proteínas,
+  "carbs": suma total de carbohidratos,
+  "fats": suma total de grasas,
+  "items": [
+    {
+      "name": "nombre del alimento individual",
+      "grams": cantidad en gramos,
+      "calories": calorías de este item,
+      "protein": proteínas de este item,
+      "carbs": carbohidratos de este item,
+      "fats": grasas de este item
+    }
+  ]
+}
+
+Ejemplo 1: "Para el almuerzo comí 200 gramos de pollo a la plancha con 150 gramos de arroz blanco"
+Respuesta:
+{
+  "meal_type": "lunch",
+  "name": "Pollo a la plancha con arroz blanco",
+  "grams": 350,
+  "calories": 495,
+  "protein": 52,
+  "carbs": 53,
+  "fats": 5,
+  "items": [
+    {
+      "name": "Pollo a la plancha",
+      "grams": 200,
+      "calories": 330,
+      "protein": 50,
+      "carbs": 0,
+      "fats": 5
+    },
+    {
+      "name": "Arroz blanco",
+      "grams": 150,
+      "calories": 165,
+      "protein": 2,
+      "carbs": 53,
+      "fats": 0
+    }
+  ]
+}
+
+Ejemplo 2: "Desayuno: tostadas con aguacate y huevos revueltos"
+Respuesta:
+{
+  "meal_type": "breakfast",
+  "name": "Tostadas con aguacate y huevos revueltos",
+  "grams": 270,
+  "calories": 485,
+  "protein": 22,
+  "carbs": 42,
+  "fats": 24,
+  "items": [
+    {
+      "name": "Pan tostado",
+      "grams": 80,
+      "calories": 210,
+      "protein": 7,
+      "carbs": 40,
+      "fats": 2
+    },
+    {
+      "name": "Aguacate",
+      "grams": 90,
+      "calories": 145,
+      "protein": 2,
+      "carbs": 2,
+      "fats": 14
+    },
+    {
+      "name": "Huevos revueltos (2 unidades)",
+      "grams": 100,
+      "calories": 130,
+      "protein": 13,
+      "carbs": 0,
+      "fats": 8
+    }
+  ]
+}`
+
+      // Crear promesa con timeout de 20 segundos
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout: El análisis tardó demasiado. Por favor, inténtalo de nuevo.')), 20000)
+      })
+
+      const generatePromise = model.generateContent(prompt)
+
+      // Esperar la primera promesa que se resuelva (generación o timeout)
+      const result = await Promise.race([generatePromise, timeoutPromise])
+
+      const response = result.response
+      const text = response.text()
+
+      // Extraer JSON del texto (puede venir con markdown)
+      const jsonMatch = text.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('No se pudo extraer información nutricional del texto')
+      }
+
+      const nutritionData: NutritionAnalysis = JSON.parse(jsonMatch[0])
+
+      // Validar datos
+      if (!nutritionData.name || !nutritionData.meal_type ||
+          nutritionData.calories < 0 || nutritionData.grams < 0) {
+        throw new Error('Datos nutricionales inválidos')
+      }
+
+      return nutritionData
+    } catch (err) {
+      console.error('Error al analizar texto:', err)
+      error.value = err instanceof Error ? err.message : 'Error desconocido al analizar el texto'
+      throw err
+    } finally {
+      isAnalyzing.value = false
+    }
+  }
+
   return {
     isAnalyzing,
     error,
     analyzeImageNutrition,
-    analyzeAudioNutrition
+    analyzeAudioNutrition,
+    analyzeTextNutrition
   }
 }
 

@@ -5,6 +5,7 @@ import { useMealsStore } from '@/stores/meals'
 import { useAudioRecorder } from '@/composables/useAudioRecorder'
 import { useImageCapture } from '@/composables/useImageCapture'
 import { useGeminiNutrition } from '@/composables/useGeminiNutrition'
+import { useSelectedDate } from '@/composables/useSelectedDate'
 import type { Food } from '@/lib/supabase'
 
 const emit = defineEmits<{
@@ -17,9 +18,10 @@ const mealsStore = useMealsStore()
 const audioRecorder = useAudioRecorder()
 const imageCapture = useImageCapture()
 const geminiNutrition = useGeminiNutrition()
+const { selectedDate } = useSelectedDate()
 
 // Estado del flujo
-const step = ref<'search' | 'configure' | 'audio' | 'image'>('search')
+const step = ref<'search' | 'configure' | 'audio' | 'image' | 'text'>('search')
 
 // Búsqueda
 const searchInput = ref('')
@@ -54,6 +56,20 @@ const foodItems = ref<Array<{
 }>>([])
 
 const isSaving = ref(false)
+
+// Descripción de texto
+const textDescription = ref('')
+
+// Función para crear timestamp con la fecha seleccionada y hora actual
+const getEatenAtTimestamp = () => {
+  const now = new Date()
+  const selected = new Date(selectedDate.value)
+
+  // Combinar fecha seleccionada con hora actual
+  selected.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
+
+  return selected.toISOString()
+}
 
 // Limpiar todo al montar el componente
 onMounted(() => {
@@ -234,14 +250,15 @@ const saveMeal = async () => {
 
   isSaving.value = true
   try {
+    // Redondear valores antes de guardar (doble seguridad)
     const result = await mealsStore.addMeal({
       name: mealConfig.value.name,
       meal_type: mealConfig.value.meal_type,
-      calories: mealConfig.value.calories,
-      protein: mealConfig.value.protein,
-      carbs: mealConfig.value.carbs,
-      fats: mealConfig.value.fats,
-      eaten_at: new Date().toISOString()
+      calories: Math.round(mealConfig.value.calories),
+      protein: Math.round(mealConfig.value.protein),
+      carbs: Math.round(mealConfig.value.carbs),
+      fats: Math.round(mealConfig.value.fats),
+      eaten_at: getEatenAtTimestamp()
     })
 
     console.log('[DEBUG] Resultado de addMeal:', result)
@@ -306,15 +323,15 @@ const stopAndProcessAudio = async () => {
     // Guardar items individuales
     foodItems.value = nutritionData.items || []
 
-    // Configurar la comida con los datos analizados
+    // Configurar la comida con los datos analizados (redondeando valores)
     mealConfig.value = {
       meal_type: nutritionData.meal_type,
-      grams: nutritionData.grams,
+      grams: Math.round(nutritionData.grams),
       name: nutritionData.name,
-      calories: nutritionData.calories,
-      protein: nutritionData.protein,
-      carbs: nutritionData.carbs,
-      fats: nutritionData.fats
+      calories: Math.round(nutritionData.calories),
+      protein: Math.round(nutritionData.protein),
+      carbs: Math.round(nutritionData.carbs),
+      fats: Math.round(nutritionData.fats)
     }
 
     // Ir a configuración (sin selectedFood porque vino de audio)
@@ -335,42 +352,61 @@ const cancelAudioRecording = () => {
   step.value = 'search'
 }
 
-// Guardar comida desde audio (sin validación de selectedFood)
+// Guardar comida desde audio/texto/imagen (sin validación de selectedFood)
 const saveMealFromAudio = async () => {
+  console.log('[DEBUG 1] saveMealFromAudio iniciado')
+  console.log('[DEBUG 2] mealConfig:', JSON.stringify(mealConfig.value, null, 2))
+
   if (mealConfig.value.grams <= 0 || mealConfig.value.calories <= 0) {
-    console.error('Validación falló - grams:', mealConfig.value.grams, 'calories:', mealConfig.value.calories)
+    console.error('[ERROR] Validación falló - grams:', mealConfig.value.grams, 'calories:', mealConfig.value.calories)
+    alert('Validación falló: gramos o calorías inválidos')
     return
   }
 
-  console.log('[DEBUG] Guardando comida desde audio:', mealConfig.value)
+  console.log('[DEBUG 3] Validación pasada')
 
   isSaving.value = true
+  console.log('[DEBUG 4] isSaving = true')
+
   try {
-    const result = await mealsStore.addMeal({
+    // Redondear valores antes de guardar (doble seguridad)
+    const mealData = {
       name: mealConfig.value.name,
       meal_type: mealConfig.value.meal_type,
-      calories: mealConfig.value.calories,
-      protein: mealConfig.value.protein,
-      carbs: mealConfig.value.carbs,
-      fats: mealConfig.value.fats,
-      eaten_at: new Date().toISOString()
-    })
+      calories: Math.round(mealConfig.value.calories),
+      protein: Math.round(mealConfig.value.protein),
+      carbs: Math.round(mealConfig.value.carbs),
+      fats: Math.round(mealConfig.value.fats),
+      eaten_at: getEatenAtTimestamp()
+    }
 
-    console.log('[DEBUG] Resultado de addMeal:', result)
+    console.log('[DEBUG 5] Datos a guardar:', JSON.stringify(mealData, null, 2))
+    console.log('[DEBUG 6] Llamando a mealsStore.addMeal...')
+
+    const result = await mealsStore.addMeal(mealData)
+
+    console.log('[DEBUG 7] Resultado de addMeal:', JSON.stringify(result, null, 2))
 
     if (result?.error) {
+      console.error('[ERROR] addMeal retornó error:', result.error)
       throw result.error
     }
 
-    console.log('[DEBUG] Comida guardada exitosamente')
+    console.log('[DEBUG 8] Comida guardada exitosamente, emitiendo eventos...')
     emit('saved')
+    console.log('[DEBUG 9] Evento saved emitido')
     emit('close')
+    console.log('[DEBUG 10] Evento close emitido')
   } catch (error) {
-    console.error('[ERROR] Error al guardar comida:', error)
-    alert(`Error al guardar la comida: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    console.error('[ERROR] Excepción capturada:', error)
+    console.error('[ERROR] Stack:', error instanceof Error ? error.stack : 'No stack')
+    alert(`Error al guardar la comida: ${error instanceof Error ? error.message : JSON.stringify(error)}`)
   } finally {
+    console.log('[DEBUG 11] Finally block - isSaving = false')
     isSaving.value = false
   }
+
+  console.log('[DEBUG 12] saveMealFromAudio finalizado')
 }
 
 // Recalcular totales cuando se elimina un alimento
@@ -384,7 +420,8 @@ const recalculateTotals = () => {
     return
   }
 
-  mealConfig.value.grams = foodItems.value.reduce((sum, item) => sum + item.grams, 0)
+  // Redondear siempre los totales
+  mealConfig.value.grams = Math.round(foodItems.value.reduce((sum, item) => sum + item.grams, 0))
   mealConfig.value.calories = Math.round(foodItems.value.reduce((sum, item) => sum + item.calories, 0))
   mealConfig.value.protein = Math.round(foodItems.value.reduce((sum, item) => sum + item.protein, 0))
   mealConfig.value.carbs = Math.round(foodItems.value.reduce((sum, item) => sum + item.carbs, 0))
@@ -415,15 +452,15 @@ const processImage = async (imageBase64: string) => {
     // Guardar items individuales
     foodItems.value = nutritionData.items || []
 
-    // Configurar la comida con los datos analizados
+    // Configurar la comida con los datos analizados (redondeando valores)
     mealConfig.value = {
       meal_type: nutritionData.meal_type,
-      grams: nutritionData.grams,
+      grams: Math.round(nutritionData.grams),
       name: nutritionData.name,
-      calories: nutritionData.calories,
-      protein: nutritionData.protein,
-      carbs: nutritionData.carbs,
-      fats: nutritionData.fats
+      calories: Math.round(nutritionData.calories),
+      protein: Math.round(nutritionData.protein),
+      carbs: Math.round(nutritionData.carbs),
+      fats: Math.round(nutritionData.fats)
     }
 
     // Ir a configuración (sin selectedFood porque vino de imagen)
@@ -437,6 +474,54 @@ const processImage = async (imageBase64: string) => {
     imageCapture.clearImage()
   }
 }
+
+// ========== FUNCIONALIDAD DE TEXTO ==========
+
+// Iniciar entrada de texto
+const startTextInput = () => {
+  step.value = 'text'
+  textDescription.value = ''
+}
+
+// Analizar texto con Gemini
+const analyzeText = async () => {
+  if (!textDescription.value.trim()) {
+    alert('Por favor, escribe una descripción de tu comida')
+    return
+  }
+
+  try {
+    // Analizar con Gemini
+    const nutritionData = await geminiNutrition.analyzeTextNutrition(textDescription.value)
+
+    // Guardar items individuales
+    foodItems.value = nutritionData.items || []
+
+    // Configurar la comida con los datos analizados (redondeando valores)
+    mealConfig.value = {
+      meal_type: nutritionData.meal_type,
+      grams: Math.round(nutritionData.grams),
+      name: nutritionData.name,
+      calories: Math.round(nutritionData.calories),
+      protein: Math.round(nutritionData.protein),
+      carbs: Math.round(nutritionData.carbs),
+      fats: Math.round(nutritionData.fats)
+    }
+
+    // Ir a configuración (sin selectedFood porque vino de texto)
+    selectedFood.value = null
+    step.value = 'configure'
+  } catch (error) {
+    console.error('Error al procesar texto:', error)
+    alert('Error al analizar la descripción. Por favor, inténtalo de nuevo.')
+  }
+}
+
+// Cancelar entrada de texto
+const cancelTextInput = () => {
+  textDescription.value = ''
+  step.value = 'search'
+}
 </script>
 
 <template>
@@ -447,10 +532,10 @@ const processImage = async (imageBase64: string) => {
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-2xl font-black">
-              {{ step === 'search' ? 'Registrar Comida' : step === 'audio' ? 'Grabando Audio' : step === 'image' ? 'Analizando Imagen' : 'Configurar Comida' }}
+              {{ step === 'search' ? 'Registrar Comida' : step === 'audio' ? 'Grabando Audio' : step === 'image' ? 'Analizando Imagen' : step === 'text' ? 'Descripción de Texto' : 'Configurar Comida' }}
             </h2>
             <p class="text-primary-100 text-sm font-medium mt-1">
-              {{ step === 'search' ? 'Busca un alimento, foto o audio' : step === 'audio' ? 'Describe lo que comiste' : step === 'image' ? 'Procesando tu foto...' : 'Ajusta la cantidad y tipo de comida' }}
+              {{ step === 'search' ? 'Busca un alimento, foto, audio o texto' : step === 'audio' ? 'Describe lo que comiste' : step === 'image' ? 'Procesando tu foto...' : step === 'text' ? 'Escribe lo que comiste' : 'Ajusta la cantidad y tipo de comida' }}
             </p>
           </div>
           <button
@@ -468,26 +553,36 @@ const processImage = async (imageBase64: string) => {
       <div class="p-6">
         <!-- STEP 1: Búsqueda -->
         <div v-if="step === 'search'">
-          <!-- Botones de captura rápida (Audio y Foto) -->
-          <div class="mb-6 grid grid-cols-2 gap-3">
+          <!-- Botones de captura rápida (Foto, Audio y Texto) -->
+          <div class="mb-6 grid grid-cols-3 gap-3">
             <!-- Botón de Foto -->
             <button
               @click="captureFromCamera"
-              class="bg-gradient-to-br from-blue-500 to-cyan-600 text-white rounded-xl p-5 shadow-lg hover:shadow-xl transition-all active:scale-95"
+              class="bg-gradient-to-br from-blue-500 to-cyan-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95"
             >
-              <div class="text-4xl mb-2">📸</div>
-              <div class="text-sm font-black">Foto</div>
-              <div class="text-xs text-white/80 mt-1">Escanear comida</div>
+              <div class="text-3xl mb-1">📸</div>
+              <div class="text-xs font-black">Foto</div>
+              <div class="text-[10px] text-white/80 mt-1">Escanear</div>
             </button>
 
             <!-- Botón de Audio -->
             <button
               @click="startAudioRecording"
-              class="bg-gradient-to-br from-red-500 to-pink-600 text-white rounded-xl p-5 shadow-lg hover:shadow-xl transition-all active:scale-95"
+              class="bg-gradient-to-br from-red-500 to-pink-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95"
             >
-              <div class="text-4xl mb-2">🎤</div>
-              <div class="text-sm font-black">Audio</div>
-              <div class="text-xs text-white/80 mt-1">Describir por voz</div>
+              <div class="text-3xl mb-1">🎤</div>
+              <div class="text-xs font-black">Audio</div>
+              <div class="text-[10px] text-white/80 mt-1">Por voz</div>
+            </button>
+
+            <!-- Botón de Texto -->
+            <button
+              @click="startTextInput"
+              class="bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all active:scale-95"
+            >
+              <div class="text-3xl mb-1">✍️</div>
+              <div class="text-xs font-black">Texto</div>
+              <div class="text-[10px] text-white/80 mt-1">Describir</div>
             </button>
           </div>
 
@@ -647,6 +742,80 @@ const processImage = async (imageBase64: string) => {
               class="mt-3 w-full px-4 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
             >
               Intentar de nuevo
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP TEXT: Entrada de texto -->
+        <div v-if="step === 'text'" class="space-y-6">
+          <!-- Instrucciones -->
+          <div class="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-5">
+            <div class="flex items-start space-x-3 mb-3">
+              <div class="text-2xl">💡</div>
+              <div class="flex-1">
+                <p class="font-black text-lg text-gray-900 mb-2">Describe tu comida</p>
+                <p class="text-sm text-gray-700 mb-2">Escribe lo que comiste y la IA calculará las calorías y macros automáticamente.</p>
+                <div class="text-xs text-gray-600 space-y-1">
+                  <p><strong>Ejemplos:</strong></p>
+                  <p class="italic">• "Para el almuerzo comí 200g de pollo a la plancha con arroz"</p>
+                  <p class="italic">• "Desayuno: tostadas con aguacate y 2 huevos revueltos"</p>
+                  <p class="italic">• "Cena: ensalada de atún con tomate"</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Textarea para descripción -->
+          <div>
+            <label class="block text-sm font-bold text-gray-800 mb-2">Tu comida:</label>
+            <textarea
+              v-model="textDescription"
+              placeholder="Ej: Para el almuerzo comí 200 gramos de pollo a la plancha con 150 gramos de arroz blanco..."
+              rows="6"
+              class="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition font-medium resize-none"
+              :disabled="geminiNutrition.isAnalyzing.value"
+            ></textarea>
+            <p class="text-xs text-gray-500 mt-2">
+              {{ textDescription.length }}/500 caracteres
+            </p>
+          </div>
+
+          <!-- Estado de procesamiento -->
+          <div v-if="geminiNutrition.isAnalyzing.value" class="text-center py-8">
+            <div class="inline-block w-16 h-16 border-8 border-green-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <div>
+              <p class="text-lg font-black text-gray-900 mb-1">Analizando tu descripción...</p>
+              <p class="text-gray-600 text-sm">Calculando valores nutricionales exactos</p>
+            </div>
+          </div>
+
+          <!-- Errores -->
+          <div v-if="geminiNutrition.error.value" class="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+            <p class="text-red-700 font-semibold">{{ geminiNutrition.error.value }}</p>
+          </div>
+
+          <!-- Botones -->
+          <div class="flex space-x-3">
+            <button
+              @click="cancelTextInput"
+              class="flex-1 px-6 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-all"
+              :disabled="geminiNutrition.isAnalyzing.value"
+            >
+              Cancelar
+            </button>
+            <button
+              @click="analyzeText"
+              class="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-500 text-white font-bold rounded-xl hover:from-green-700 hover:to-emerald-600 shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!textDescription.trim() || geminiNutrition.isAnalyzing.value"
+            >
+              <span v-if="!geminiNutrition.isAnalyzing.value">✓ Analizar</span>
+              <span v-else class="flex items-center justify-center space-x-2">
+                <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Analizando...</span>
+              </span>
             </button>
           </div>
         </div>

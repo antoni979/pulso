@@ -79,28 +79,58 @@ export const useMealsStore = defineStore('meals', () => {
 
   // Add meal
   async function addMeal(meal: Omit<Meal, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
+    console.log('[STORE DEBUG 1] addMeal iniciado')
+    console.log('[STORE DEBUG 2] meal recibido:', JSON.stringify(meal, null, 2))
+
     const authStore = useAuthStore()
-    if (!authStore.user) return { error: new Error('No user logged in') }
+    console.log('[STORE DEBUG 3] authStore.user:', authStore.user?.id || 'No user')
+
+    if (!authStore.user) {
+      console.error('[STORE ERROR] No user logged in')
+      return { error: new Error('No user logged in') }
+    }
 
     loading.value = true
+    console.log('[STORE DEBUG 4] loading = true')
+
     try {
+      // Redondear valores nutricionales a enteros antes de guardar
+      // Esto previene errores cuando vienen decimales desde audio/foto/edición manual
+      const mealToSave = {
+        ...meal,
+        calories: Math.round(meal.calories),
+        protein: Math.round(meal.protein),
+        carbs: Math.round(meal.carbs),
+        fats: Math.round(meal.fats),
+        user_id: authStore.user.id
+      }
+
+      console.log('[STORE DEBUG 5] mealToSave:', JSON.stringify(mealToSave, null, 2))
+      console.log('[STORE DEBUG 6] Insertando en Supabase...')
+
       const { data, error } = await supabase
         .from('meals')
-        .insert({
-          ...meal,
-          user_id: authStore.user.id
-        })
+        .insert(mealToSave)
         .select()
         .single()
 
-      if (error) throw error
+      console.log('[STORE DEBUG 7] Respuesta de Supabase - data:', data)
+      console.log('[STORE DEBUG 8] Respuesta de Supabase - error:', error)
 
+      if (error) {
+        console.error('[STORE ERROR] Supabase retornó error:', error)
+        throw error
+      }
+
+      console.log('[STORE DEBUG 9] Añadiendo a meals.value')
       meals.value.unshift(data)
+      console.log('[STORE DEBUG 10] Retornando success')
       return { data, error: null }
     } catch (error) {
-      console.error('Error adding meal:', error)
+      console.error('[STORE ERROR] Excepción:', error)
       return { data: null, error: error as Error }
     } finally {
+      console.log('[STORE DEBUG 11] loading = false')
       loading.value = false
     }
   }
@@ -109,9 +139,16 @@ export const useMealsStore = defineStore('meals', () => {
   async function updateMeal(id: string, updates: Partial<Meal>) {
     loading.value = true
     try {
+      // Redondear valores nutricionales si están presentes
+      const updatesToSave = { ...updates, updated_at: new Date().toISOString() }
+      if (updatesToSave.calories !== undefined) updatesToSave.calories = Math.round(updatesToSave.calories)
+      if (updatesToSave.protein !== undefined) updatesToSave.protein = Math.round(updatesToSave.protein)
+      if (updatesToSave.carbs !== undefined) updatesToSave.carbs = Math.round(updatesToSave.carbs)
+      if (updatesToSave.fats !== undefined) updatesToSave.fats = Math.round(updatesToSave.fats)
+
       const { data, error } = await supabase
         .from('meals')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(updatesToSave)
         .eq('id', id)
         .select()
         .single()
